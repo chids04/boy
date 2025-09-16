@@ -15,7 +15,6 @@ uint16_t read_word(uint16_t address) {
 
 void write_word(uint16_t address, uint16_t data) {
     // need to store little endian (lsb in lower address)
-
     memory[address] = data & 0x00FF;
     memory[address+1] = data >> 8;
 }
