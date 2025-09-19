@@ -4,6 +4,7 @@ project(boy C CXX)
 
 add_library(GbCore
     src/gbcore.c
+    src/cpu.c
 )
 
 target_include_directories(GbCore PUBLIC src)

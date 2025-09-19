@@ -1,4 +1,4 @@
-#include <cstdint>
+#include <stdint.h>
 
 uint8_t memory[0xFFFF];
 
