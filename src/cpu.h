@@ -1,13 +1,35 @@
 #pragma once
 
-#include "memory.h"
+#include "gb_mem.h"
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
 
-// https://gbdev.io/pandocs/CPU_Instruction_Set.html used for the grouping of
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define REG_B 0
+#define REG_C 1
+#define REG_D 2
+#define REG_E 3
+#define REG_H 4
+#define REG_L 5
+#define REG_HL_8 6
+#define REG_A 7
+// 16 bit registers (pairs of 8 bit registers)
+#define REG_BC 0
+#define REG_DE 1
+#define REG_HL 2
+
+// both SP and AF reg have same index, their uses depend on the instruction
+#define REG_SP 3
+#define REG_AF 3
+
+
+
+// https://archive.gbdev.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
+// used for the grouping of
 // different CPU opcodes
 
 static bool lookup_table[256];
@@ -38,8 +60,6 @@ typedef struct {
 
 } CPU;
 
-typedef void (*I_Handler)(CPU *cpu);
-I_Handler i_handlers[256];
 
 // instruction handlers //
 
@@ -59,8 +79,19 @@ void ld_bc_a(CPU *cpu);
 void ld_hli_a(CPU *cpu);
 void ld_de_a(CPU *cpu);
 void ld_hld_a(CPU *cpu);
+void ld_a_bc(CPU* cpu);
+void ld_a_hli(CPU *cpu);
+void ld_a_de(CPU *cpu);
+void ld_a_hld(CPU *cpu);
 
 
+void inc_r16(CPU *cpu);
+void dec_r16(CPU *cpu);
+
+void inc_r8(CPU *cpu);
+void dec_r8(CPU *cpu);
+
+void ld_r8_imm8(CPU *cpu);
 // writing to register pairs
 
 
@@ -75,11 +106,13 @@ uint8_t read_n8(CPU *cpu);
 uint16_t read_n16(CPU *cpu);
 
 // reads bytes immediately after instruction and increments PC
-uint16_t read_r16(uint8_t idx, CPU *cpu, bool has_sp=false);
+uint16_t read_r16(uint8_t idx, CPU *cpu, bool has_sp);
 uint8_t read_r8(uint8_t idx, CPU *cpu);
 
-// writes bytes to the specificed 8 bit register pair
-void write_rp(uint16_t data, uint8_t reg, CPU *cpu);
+// writes bytes to registers
+void write_r16(uint16_t data, uint8_t reg, CPU *cpu);
+void write_r8(uint8_t data, uint8_t reg, CPU *cpu);
+
 
 // utils for calculating half carries
 void add8_half_carry(const uint8_t value, CPU *cpu);
@@ -87,100 +120,9 @@ void dec8_half_carry(const uint8_t value, CPU *cpu);
 void add16_half_carry(const uint8_t value, CPU *cpu);
 void dec16_half_carry(const uint8_t value, CPU *cpu);
 
-void decode_instruction(CPU *cpu) {
-   cpu->opcode = read_byte(cpu->PC++);
 
-  uint8_t x_mask = 0b11 << 6;
-  uint8_t x = (cpu->opcode & x_mask) >> 6;
+void decode_instruction(CPU *cpu);
 
-  switch (x) {
-
-  // block 0
-  case 0:
-    uint8_t z_mask = 0b111;
-    uint8_t z = cpu->opcode & z_mask;
-
-    uint8_t y_mask = 0b111 << 3;
-    uint8_t y = (cpu->opcode & y_mask) >> 3;
-
-    switch(z) {
-        case 0:
-            switch (y) {
-                case 0:
-                    nop(cpu);
-                    return;
-
-                case 1:
-                    ld_nn_sp(cpu);
-                    return;
-
-                case 2:
-                    stop(cpu);
-                    return;
-
-                case 3:
-                    jr_d(cpu);
-                    return;
-
-                case 4 ... 7:
-                    jr_cc_d(cpu);
-                    return;
-            }
-
-            break;
-
-        case 1:
-            {
-            uint8_t q = y % 2;
-            switch (q) {
-                case 0:
-                    ld_r16_imm16(cpu);
-                    return;
-                case 1:
-                    add_hl_r16(cpu);
-                    return;
-            }
-
-            }
-
-
-        case 2:
-            {
-            uint8_t q = y % 2;
-            uint8_t p = y >> 1;
-            switch (q) {
-                case 0:
-                    switch (p) {
-                        case 0:
-
-                        case 1:
-
-                        case 2:
-
-                        case 3:
-                            return;
-                    }
-
-                    break;
-
-
-                case 1:
-                    switch (p) {
-                        case 0:
-
-                        case 1:
-
-                        case 2:
-
-                        case 3:
-                            return;
-                    }
-
-                    break;
-            }
-            }
-
-        }
-
-    }
+#ifdef __cplusplus
 }
+#endif

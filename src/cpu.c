@@ -24,7 +24,7 @@ void jr_d(CPU *cpu) {
     int8_t d = (int8_t)read_n8(cpu);
     cpu->PC += d;
 
-    cpu->cycles = 2;
+    cpu->cycles = 3;
 }
 
 void jr_cc_d(CPU *cpu) {
@@ -42,57 +42,243 @@ void jr_cc_d(CPU *cpu) {
     }
 }
 
-void lr_r16_imm16(CPU *cpu) {
+void ld_r16_imm16(CPU *cpu) {
+
     uint16_t imm16 = read_word(cpu->PC);
     uint8_t y_mask = 0b111 << 3;
 
     // p is top 2 msb of y (bits 5 - 4 of opcode)
     uint8_t p = (cpu->opcode & y_mask) >> 4;
 
-    write_rp(imm16, p, cpu);
+    write_r16(imm16, p, cpu);
 
     cpu->cycles = 3;
-    // switch on the different register pairs
 
 }
 
 void add_hl_r16(CPU *cpu) {
     // p is top 2 msb of y (bits 5 - 4 of opcode)
+    //
     uint8_t y_mask = 0b111 << 3;
     uint8_t p = (cpu->opcode & y_mask) >> 4;
 
-    uint16_t data = read_r16(p, cpu);
-    uint16_t hl = (cpu->H << 8) | cpu->L;
+    uint16_t data = read_r16(p, cpu, false);
 
-    write_rp(data + hl, 2, cpu);
+    uint16_t hl = read_r16(REG_HL, cpu, false);
+    write_r16(data + hl, 2, cpu);
 
     cpu->cycles = 2;
 }
 
+void ld_bc_a(CPU *cpu) {
+    // mem[bc] = A
+
+    uint16_t addr = read_r16(REG_BC, cpu, false);
+    write_word(addr, cpu->A);
+
+    cpu->cycles = 2;
+}
+
+void ld_hli_a(CPU *cpu) {
+    // mem[hl] = A, HL--
+
+    uint16_t addr = (cpu->H << 8) | cpu->L;
+    write_word(addr, cpu->A);
+
+    addr += 1;
+
+    cpu->H = (addr >> 8) & 0xFF;
+    cpu->L = addr & 0x0FF;
+
+    cpu->cycles = 2;
+
+}
+
+void ld_de_a(CPU *cpu) {
+    // mem[de] = A
+
+    uint16_t addr = read_r16(REG_DE, cpu, false);
+    write_word(addr, cpu->A);
+
+    cpu->cycles = 2;
+}
+
+void ld_hld_a(CPU *cpu) {
+    // mem[HL] = A, HL--
+    uint16_t addr = read_r16(REG_HL, cpu, false);
+    write_word(addr, cpu->A);
+    addr -= 1;
+    write_r16(addr, REG_HL, cpu);
+
+    cpu->cycles = 2;
+}
+
+void ld_a_bc(CPU* cpu) {
+    // a = memory[bc].
+
+    uint8_t address = read_r16(REG_BC, cpu, false);
+    uint8_t data = read_byte(address);
+    cpu->A = data;
+
+    cpu->cycles = 2;
+}
+
+void ld_a_hli(CPU *cpu) {
+    // load a from memory location specified by hl, then increment hl.
+
+    uint8_t address = read_r16(REG_BC, cpu, false);
+    uint8_t data = read_byte(address);
+    cpu->A = data;
+
+    write_r16(address + 1, REG_BC, cpu);
+
+}
+
+void ld_a_de(CPU *cpu) {
+    // load a from memory location specified by de.
+
+    uint8_t address = read_r16(REG_DE, cpu, false);
+    uint8_t data = read_byte(address);
+    cpu->A = data;
+
+    write_r16(address + 1, REG_BC, cpu);
+}
+
+void ld_a_hld(CPU *cpu) {
+    // load from memory location specified by hl into A, then decrement hl.
+    uint8_t address = read_r16(REG_HL, cpu, false);
+    uint8_t data = read_byte(address);
+    cpu->A = data;
+
+    write_r16(address - 1, REG_BC, cpu);
+}
+
 void inc_r8(CPU *cpu){
-    // increment register r8 by 1
-    //match on bit 3, 4 and 5
     uint8_t mask = 0b111 << 3;
-    uint8_t sel = (cpu->opcode & mask) >> 3;
+    uint8_t y = (cpu->opcode & mask) >> 3;
 
-    switch (sel) {
-        case 0b111:
-            add8_half_carry(cpu->A, cpu);
-        case 0b000:
-            add8_half_carry(cpu->B, cpu);
-        case 0b001:
-            add8_half_carry(cpu->C, cpu);
-        case 0b010:
-            add8_half_carry(cpu->D, cpu);
+    uint8_t q = y >> 2;
 
-        case 0b011:
-            add8_half_carry(cpu->E, cpu);
+    uint8_t data = read_r8(q, cpu);
 
-        case 0b100:
-            add8_half_carry(cpu->H, cpu);
+    // first check for half carries
+    add8_half_carry(data, cpu);
+    data += 1;
 
-        case 0b101:
-            add8_half_carry(cpu->L, cpu);
+    // check zero flag and right to registers
+    write_r8(data, q, cpu);
+
+}
+
+void decode_instruction(CPU *cpu) {
+   cpu->opcode = read_byte(cpu->PC++);
+
+  uint8_t x_mask = 0b11 << 6;
+  uint8_t x = (cpu->opcode & x_mask) >> 6;
+
+  switch (x) {
+
+  // block 0
+  case 0:
+    uint8_t z_mask = 0b111;
+    uint8_t z = cpu->opcode & z_mask;
+
+    uint8_t y_mask = 0b111 << 3;
+    uint8_t y = (cpu->opcode & y_mask) >> 3;
+
+    switch(z) {
+        case 0:
+            switch (y) {
+                case 0:
+                    nop(cpu);
+                    return;
+
+                case 1:
+                    ld_nn_sp(cpu);
+                    return;
+
+                case 2:
+                    stop(cpu);
+                    return;
+
+                case 3:
+                    jr_d(cpu);
+                    return;
+
+                case 4 ... 7:
+                    jr_cc_d(cpu);
+                    return;
+            }
+
+            break;
+
+        case 1:
+            {
+            uint8_t q = y % 2;
+            switch (q) {
+                case 0:
+                    ld_r16_imm16(cpu);
+                    return;
+                case 1:
+                    add_hl_r16(cpu);
+                    return;
+            }
+
+            }
+
+
+        case 2:
+            {
+            uint8_t q = y % 2;
+            uint8_t p = y >> 1;
+            switch (q) {
+                case 0:
+                    switch (p) {
+                        case 0:
+                            ld_bc_a(cpu);
+                            return;
+
+                        case 1:
+                            ld_de_a(cpu);
+                            return;
+
+                        case 2:
+                            ld_hli_a(cpu);
+                            return;
+
+                        case 3:
+                            ld_hld_a(cpu);
+                            return;
+                    }
+
+                    break;
+
+
+                case 1:
+                    switch (p) {
+                        case 0:
+                            ld_a_bc(cpu);
+                            return;
+
+                        case 1:
+                            ld_a_hli(cpu);
+                            return;
+
+                        case 2:
+                            ld_a_de(cpu);
+                            return;
+
+                        case 3:
+                            ld_a_hld(cpu);
+                            return;
+                    }
+
+                    break;
+            }
+            }
+
+        }
+
     }
 }
 
@@ -169,20 +355,23 @@ uint8_t read_r8(uint8_t idx, CPU *cpu) {
         case 7:
             return cpu->A;
     }
+
+    printf("read_r8: invalid 8 bit register, returning 0\n");
+    return 0x0;
 }
 
 uint16_t read_r16(uint8_t idx, CPU *cpu, bool has_sp) {
     switch (idx) {
-        case 0:
+        case REG_BC:
             return (cpu->B << 8) | cpu->C;
 
-        case 1:
+        case REG_DE:
             return (cpu->D << 8) | cpu->E;
 
-        case 2:
+        case REG_HL:
             return (cpu->H << 8) | cpu->L;
 
-        case 3:
+        case REG_AF:
             if (has_sp){
                 return cpu->SP;
             }
@@ -191,33 +380,78 @@ uint16_t read_r16(uint8_t idx, CPU *cpu, bool has_sp) {
             }
     }
 
+    printf("read_r16: invalid register pair, returning 0\n");
+    return 0x0;
+
 }
 
-void write_rp(uint16_t data, uint8_t reg, CPU *cpu){
+void write_r16(uint16_t data, uint8_t reg, CPU *cpu){
     switch (reg) {
-        case 0:
+        case REG_BC:
             cpu->B = data >> 8;
-            cpu->C = data & 0x00FF;
-        case 1:
+            cpu->C = data & 0xFF;
+            break;
+
+        case REG_DE:
             cpu->D = data >> 8;
-            cpu->E = data & 0x00FF;
+            cpu->E = data & 0xFF;
+            break;
 
-        case 2:
+        case REG_HL:
             cpu->H = data >> 8;
-            cpu->L = data & 0x00FF;
+            cpu->L = data & 0xFF;
+            break;
 
-        case 3:
+        // todo: add support for AF reg too
+        case REG_SP:
             cpu->SP = data;
+            break;
+    }
+}
+
+void write_r8(uint8_t data, uint8_t reg, CPU *cpu){
+    switch (reg) {
+        case REG_B:
+            cpu->B = data;
+            break;
+        case REG_C:
+            cpu->C = data;
+            break;
+
+        case REG_D:
+            cpu->D = data;
+            break;
+
+        case REG_E:
+            cpu->E = data;
+            break;
+
+        case REG_H:
+            cpu->H = data;
+            break;
+
+        case REG_L:
+            cpu->L = data;
+            break;
+
+        case REG_HL_8:
+            {
+                uint16_t addr = read_r16(REG_HL, cpu, false);
+                write_byte(addr, data);
+
+            }
+            break;
+        case REG_A:
+            cpu->A = data;
     }
 }
 
 
-
 void add8_half_carry(const uint8_t value, CPU *cpu) {
-  uint8_t lower = value & 0b111;
+  uint8_t lower = value & 0b1111;
   uint8_t mask = 1 << 5; // at bit 5 (0 index)
 
-  if (lower == 0b111) {
+  if (lower == 0b1111) {
     cpu->F = cpu->F | mask;
   } else {
     cpu->F = cpu->F & ~mask;
@@ -237,7 +471,7 @@ void dec8_half_carry(const uint8_t value, CPU *cpu) {
 
 void add16_half_carry(const uint8_t value, CPU *cpu) {
   uint8_t lower = value & 0xFF;
-  uint8_t mask = 1 << 5; // at bit 7 (0 index)
+  uint8_t mask = 1 << 7; // at bit 7 (0 index)
 
   if (lower == 0xFF) {
     cpu->F = cpu->F | mask;
