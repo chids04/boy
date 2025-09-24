@@ -2,8 +2,11 @@ cmake_minimum_required(VERSION 3.14)
 
 project(boy C CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 add_library(GbCore
     src/gbcore.c
+    src/gb_mem.c
     src/cpu.c
 )
 
@@ -23,9 +26,17 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(run_tests test/cpu/instructions.cpp)
+add_executable(run_tests
+    test/main.cpp
+    test/cpu/instructions.cpp
+)
 
-target_link_libraries(run_tests PRIVATE GbCore GTest::gtest_main)
+
+target_include_directories(run_tests PUBLIC
+    test/cpu/
+)
+
+target_link_libraries(run_tests GbCore GTest::gtest)
 
 include(GoogleTest)
 gtest_discover_tests(run_tests)
