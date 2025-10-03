@@ -8,6 +8,7 @@ add_library(GbCore
     src/gbcore.c
     src/gb_mem.c
     src/cpu.c
+    src/cpu_utils.c
 )
 
 target_include_directories(GbCore PUBLIC src)
