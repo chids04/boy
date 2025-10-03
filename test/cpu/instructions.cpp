@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <gtest/gtest.h>
 #include "cpu-test.h"
 #include "cpu.h"
@@ -29,7 +30,7 @@ TEST_F(CPUTest, LOAD_N16_SP) {
 
     uint16_t loaded = read_word(0xBE42);
 
-    int expected_cycles = 20; // adjusted based on common gameboy timings for this op
+    int expected_cycles = 5;
 
     ASSERT_EQ(data, loaded);
     ASSERT_EQ(cpu->cycles, expected_cycles);
@@ -51,12 +52,12 @@ TEST_F(CPUTest, JR_D) {
     // new pc = (initial pc + 2) + displacement
     ASSERT_EQ(cpu->PC, initial_pc + 2 + displacement);
     // cycles for jr d: 12
-    ASSERT_EQ(cpu->cycles, 12);
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 // jr nz, d (jump if not zero)
 TEST_F(CPUTest, JR_NZ_D_Taken) {
-    uint16_t initial_pc = cpu->PC; // starts at 0
+    int16_t initial_pc = cpu->PC; // starts at 0
     uint8_t opcode = 0b00100000; // jr nz, d (0x20)
     int8_t displacement = 0x10; // jump forward 16 bytes
 
@@ -70,11 +71,11 @@ TEST_F(CPUTest, JR_NZ_D_Taken) {
 
     ASSERT_EQ(cpu->PC, initial_pc + 2 + displacement);
     // cycles for jr cc, d (taken): 12
-    ASSERT_EQ(cpu->cycles, 12);
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 TEST_F(CPUTest, JR_NZ_D_NotTaken) {
-    uint16_t initial_pc = cpu->PC; // starts at 0
+    int16_t initial_pc = cpu->PC; // starts at 0
     uint8_t opcode = 0b00100000; // jr nz, d (0x20)
     int8_t displacement = 0x10; // jump forward 16 bytes
 
@@ -88,7 +89,7 @@ TEST_F(CPUTest, JR_NZ_D_NotTaken) {
 
     ASSERT_EQ(cpu->PC, initial_pc + 2); // pc should just advance past the instruction
     // cycles for jr cc, d (not taken): 8
-    ASSERT_EQ(cpu->cycles, 8);
+    ASSERT_EQ(cpu->cycles, 2);
 }
 
 // jr z, d (jump if zero)
@@ -105,12 +106,14 @@ TEST_F(CPUTest, JR_Z_D_Taken) {
 
     decode_instruction(cpu);
 
-    ASSERT_EQ(cpu->PC, initial_pc + 2 + displacement);
-    ASSERT_EQ(cpu->cycles, 12);
+    uint16_t expected_addr = initial_pc + 2 + displacement;
+
+    ASSERT_EQ(cpu->PC, expected_addr);
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 TEST_F(CPUTest, JR_Z_D_NotTaken) {
-    uint16_t initial_pc = cpu->PC; // starts at 0
+    int16_t initial_pc = cpu->PC; // starts at 0
     uint8_t opcode = 0b00101000; // jr z, d (0x28)
     int8_t displacement = -0x05; // jump backward 5 bytes
 
@@ -123,12 +126,12 @@ TEST_F(CPUTest, JR_Z_D_NotTaken) {
     decode_instruction(cpu);
 
     ASSERT_EQ(cpu->PC, initial_pc + 2);
-    ASSERT_EQ(cpu->cycles, 8);
+    ASSERT_EQ(cpu->cycles, 2);
 }
 
 // jr nc, d (jump if not carry)
 TEST_F(CPUTest, JR_NC_D_Taken) {
-    uint16_t initial_pc = cpu->PC; // starts at 0
+    int16_t initial_pc = cpu->PC; // starts at 0
     uint8_t opcode = 0b00110000; // jr nc, d (0x30)
     int8_t displacement = 0x20; // jump forward 32 bytes
 
@@ -141,7 +144,7 @@ TEST_F(CPUTest, JR_NC_D_Taken) {
     decode_instruction(cpu);
 
     ASSERT_EQ(cpu->PC, initial_pc + 2 + displacement);
-    ASSERT_EQ(cpu->cycles, 12);
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 TEST_F(CPUTest, JR_NC_D_NotTaken) {
@@ -157,8 +160,10 @@ TEST_F(CPUTest, JR_NC_D_NotTaken) {
 
     decode_instruction(cpu);
 
+    uint16_t expected = initial_pc + displacement + 2;
+
     ASSERT_EQ(cpu->PC, initial_pc + 2);
-    ASSERT_EQ(cpu->cycles, 8);
+    ASSERT_EQ(cpu->cycles, 2);
 }
 
 // jr c, d (jump if carry)
@@ -175,8 +180,9 @@ TEST_F(CPUTest, JR_C_D_Taken) {
 
     decode_instruction(cpu);
 
-    ASSERT_EQ(cpu->PC, initial_pc + 2 + displacement);
-    ASSERT_EQ(cpu->cycles, 12);
+
+    ASSERT_EQ(cpu->PC, (uint16_t)(initial_pc + 2 + displacement));
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 TEST_F(CPUTest, JR_C_D_NotTaken) {
@@ -192,13 +198,13 @@ TEST_F(CPUTest, JR_C_D_NotTaken) {
 
     decode_instruction(cpu);
 
-    ASSERT_EQ(cpu->PC, initial_pc + 2);
-    ASSERT_EQ(cpu->cycles, 8);
+    ASSERT_EQ(cpu->PC, (uint16_t)(initial_pc + 2));
+    ASSERT_EQ(cpu->cycles, 2);
 }
 
 
 TEST_F(CPUTest, LD_BC_IMM16) {
-    uint16_t initial_pc = cpu->PC;
+    int16_t initial_pc = cpu->PC;
     uint8_t opcode = 0b00000001; // ld bc, imm16 (0x01)
     uint16_t immediate_value = 0x1234;
 
@@ -211,7 +217,7 @@ TEST_F(CPUTest, LD_BC_IMM16) {
     uint16_t bc_result = (cpu->B << 8) | cpu->C;
     ASSERT_EQ(bc_result, immediate_value);
     ASSERT_EQ(cpu->PC, initial_pc + 3); // opcode (1 byte) + imm16 (2 bytes)
-    ASSERT_EQ(cpu->cycles, 12);
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 TEST_F(CPUTest, LD_DE_IMM16) {
@@ -225,9 +231,10 @@ TEST_F(CPUTest, LD_DE_IMM16) {
     decode_instruction(cpu);
 
     uint16_t de_result = (cpu->D << 8) | cpu->E;
+
     ASSERT_EQ(de_result, immediate_value);
     ASSERT_EQ(cpu->PC, initial_pc + 3);
-    ASSERT_EQ(cpu->cycles, 12);
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 TEST_F(CPUTest, LD_HL_IMM16) {
@@ -244,11 +251,11 @@ TEST_F(CPUTest, LD_HL_IMM16) {
     uint16_t hl_result = (cpu->H << 8) | cpu->L;
     ASSERT_EQ(hl_result, immediate_value);
     ASSERT_EQ(cpu->PC, initial_pc + 3);
-    ASSERT_EQ(cpu->cycles, 12);
+    ASSERT_EQ(cpu->cycles, 3);
 }
 
 TEST_F(CPUTest, LD_SP_IMM16) {
-    uint16_t initial_pc = cpu->PC;
+    int16_t initial_pc = cpu->PC;
     uint8_t opcode = 0b00110001; // ld sp, imm16 (0x31)
     uint16_t immediate_value = 0x9876;
 
@@ -260,5 +267,5 @@ TEST_F(CPUTest, LD_SP_IMM16) {
     // verify sp register
     ASSERT_EQ(cpu->SP, immediate_value);
     ASSERT_EQ(cpu->PC, initial_pc + 3);
-    ASSERT_EQ(cpu->cycles, 12);
+    ASSERT_EQ(cpu->cycles, 3);
 }
