@@ -3,14 +3,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/*
+    decoded according to the schema at:
 
-// https://archive.gbdev.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
-// used for the grouping of
-// different CPU opcodes
+    https://archive.gbdev.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
+ *
+ */
 
 typedef struct {
     uint8_t A; // registers
@@ -31,11 +34,13 @@ typedef struct {
 
     uint16_t SP; // stack pointer
     uint16_t PC; // program counter
+    bool ime;
 
     uint8_t opcode;
-
     int cycles;
 
+    bool interrupt_delay;
+    bool enable_interrupts ;
 } CPU;
 
 // extract bit patterns in opcode
@@ -147,7 +152,6 @@ void halt(CPU *cpu);
 // x = 2
 void alu_r8(CPU *cpu);
 
-
 // alu ops
 void add_a_r8(CPU *cpu);
 void sub_a_r8(CPU *cpu);
@@ -158,22 +162,63 @@ void or_a_r8(CPU *cpu);
 void cp_r_r8(CPU *cpu);
 
 
+// x = 3
+
+// z = 0
+void ret_cc(CPU *cpu);
+void ld_0xF000_n_A(CPU *cpu);
+void ld_A_0xF000_n(CPU *cpu);
+void add_sp_d(CPU *cpu);
+void ld_hl_sp_e8(CPU *cpu);
+
+// z = 1
+void pop_r16(CPU *cpu);
+void ret(CPU *cpu);
+void ei(CPU *cpu);
+void reti(CPU *cpu);
+void jp_hl(CPU *cpu);
+void ld_sp_hl(CPU *cpu);
+
+// z=2
+void jp_cc_nn(CPU *cpu);
+void ld_0xFF00_C_A(CPU *cpu);
+void ld_A_0xFF00_C(CPU *cpu);
+void ld_nn_a(CPU *cpu);
+void ld_a_nn(CPU *cpu);
+
+// z = 3
+void jp_nn(CPU *cpu);
+
+// CB Prefix
+void rlc_r8(CPU *cpu);
+void rrc_r8(CPU *cpu);
+void rl_r8(CPU *cpu);
+void rr_r8(CPU *cpu);
+void sla_r8(CPU *cpu);
+void sra_r8(CPU *cpu);
+void swap_r8(CPU *cpu);
+void srl_r8(CPU *cpu);
+
+
 // utils for common cpu operations //
 
 // returns whether the flag is set for the specified condition
-bool condition(uint8_t idx, CPU *cpu);
+bool condition(CPU *cpu, uint8_t idx);
 
 // reads immediate value and increments pc
 uint8_t read_imm8(CPU *cpu);
 uint16_t read_imm16(CPU *cpu);
 
+// calculates the signed displacement from current PC
+int8_t displacement(CPU *cpu);
+
 // reads bytes immediately after instruction and increments PC
-uint16_t read_r16(Reg16 reg, CPU *cpu, bool has_sp);
-uint8_t read_r8(Reg8 reg, CPU *cpu);
+uint16_t read_r16(CPU *cpu, Reg16 reg, bool has_af);
+uint8_t read_r8(CPU *cpu, Reg8 reg);
 
 // writes bytes to registers
-void write_r16(uint16_t data, Reg16 reg, CPU *cpu);
-void write_r8(uint8_t data, Reg8 reg, CPU *cpu);
+void write_r16(CPU *cpu, uint16_t data, Reg16 reg, bool has_af);
+void write_r8(CPU *cpu, uint8_t data, Reg8 reg);
 
 
 // calculating half carries for inc / dec instructions
@@ -181,6 +226,9 @@ void inc8_half_carry(const uint8_t value, CPU *cpu);
 void dec8_half_carry(const uint8_t value, CPU *cpu);
 void inc16_half_carry(const uint8_t value, CPU *cpu);
 void dec16_half_carry(const uint8_t value, CPU *cpu);
+
+void half_carry8(CPU *cpu, uint8_t a, uint8_t b);
+void carry8(CPU *cpu, uint8_t a, uint8_t b);
 
 // half carries for add / sub instructions
 void add8_half_carry(const uint8_t value, CPU *cpu);

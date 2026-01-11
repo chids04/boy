@@ -29,15 +29,12 @@ void jr_d(CPU *cpu) {
 
 void jr_cc_d(CPU *cpu) {
 
-  int8_t d = (int8_t)read_imm8(cpu);
   uint8_t cond = get_y(cpu->opcode) - 4;
 
   printf("jr_cc_d: current condition %d\n", cond);
 
-  if (condition(cond, cpu)) {
-    printf(
-        "jr_cc_d: condition met, PC before displacement: %d displacement: %d\n",
-        cpu->PC, d);
+  if (condition(cpu, cond)) {
+    int8_t d = displacement(cpu);
     cpu->PC += d;
     cpu->cycles = 3;
     printf("jr_cc_d: condition met, PC after displacement: %d\n", cpu->PC);
@@ -56,7 +53,7 @@ void ld_r16_imm16(CPU *cpu) {
   // p is top 2 msb of y (bits 5 - 4 of opcode)
   uint8_t p = get_p(cpu->opcode);
 
-  write_r16(imm16, p, cpu);
+  write_r16(cpu, imm16, p, false);
 
   cpu->cycles = 3;
 }
@@ -65,10 +62,10 @@ void add_hl_r16(CPU *cpu) {
   // p is top 2 msb of y (bits 5 - 4 of opcode)
   uint8_t p = get_p(cpu->opcode);
 
-  uint16_t data = read_r16(p, cpu, false);
+  uint16_t data = read_r16(cpu, p, false);
 
-  uint16_t hl = read_r16(REG_HL_16, cpu, false);
-  write_r16(data + hl, 2, cpu);
+  uint16_t hl = read_r16(cpu, REG_HL_16, false);
+  write_r16(cpu, data + hl, 2, false);
 
   cpu->cycles = 2;
 }
@@ -76,7 +73,7 @@ void add_hl_r16(CPU *cpu) {
 void ld_bc_a(CPU *cpu) {
   // mem[bc] = A
 
-  uint16_t addr = read_r16(REG_BC, cpu, false);
+  uint16_t addr = read_r16(cpu, REG_BC, false);
   write_word(addr, cpu->A);
 
   cpu->cycles = 2;
@@ -99,7 +96,7 @@ void ld_hli_a(CPU *cpu) {
 void ld_de_a(CPU *cpu) {
   // mem[de] = A
 
-  uint16_t addr = read_r16(REG_DE, cpu, false);
+  uint16_t addr = read_r16(cpu, REG_DE, false);
   write_word(addr, cpu->A);
 
   cpu->cycles = 2;
@@ -107,10 +104,10 @@ void ld_de_a(CPU *cpu) {
 
 void ld_hld_a(CPU *cpu) {
   // mem[HL] = A, HL--
-  uint16_t addr = read_r16(REG_HL_16, cpu, false);
+  uint16_t addr = read_r16(cpu, REG_HL_16, false);
   write_word(addr, cpu->A);
   addr -= 1;
-  write_r16(addr, REG_HL_16, cpu);
+  write_r16(cpu, addr, REG_HL_16, false);
 
   cpu->cycles = 2;
 }
@@ -118,7 +115,7 @@ void ld_hld_a(CPU *cpu) {
 void ld_a_bc(CPU *cpu) {
   // a = memory[bc].
 
-  uint8_t address = read_r16(REG_BC, cpu, false);
+  uint8_t address = read_r16(cpu, REG_BC, false);
   uint8_t data = read_byte(address);
   cpu->A = data;
 
@@ -128,30 +125,30 @@ void ld_a_bc(CPU *cpu) {
 void ld_a_hli(CPU *cpu) {
   // load a from memory location specified by hl, then increment hl.
 
-  uint8_t address = read_r16(REG_BC, cpu, false);
+  uint8_t address = read_r16(cpu, REG_BC, false);
   uint8_t data = read_byte(address);
   cpu->A = data;
 
-  write_r16(address + 1, REG_BC, cpu);
+  write_r16(cpu, address + 1, REG_BC, false);
 }
 
 void ld_a_de(CPU *cpu) {
   // load a from memory location specified by de.
 
-  uint8_t address = read_r16(REG_DE, cpu, false);
+  uint8_t address = read_r16(cpu, REG_DE, false);
   uint8_t data = read_byte(address);
   cpu->A = data;
 
-  write_r16(address + 1, REG_DE, cpu);
+  write_r16(cpu, address + 1, REG_DE, false);
 }
 
 void ld_a_hld(CPU *cpu) {
   // load from memory location specified by hl into A, then decrement hl.
-  uint16_t address = read_r16(REG_HL_16, cpu, false);
+  uint16_t address = read_r16(cpu, REG_HL_16, false);
   uint8_t data = read_byte(address);
   cpu->A = data;
 
-  write_r8(address - 1, REG_A, cpu);
+  write_r8(cpu, address - 1, REG_A);
 }
 
 void inc_r8(CPU *cpu) {
@@ -159,7 +156,7 @@ void inc_r8(CPU *cpu) {
 
   uint8_t q = y >> 2;
 
-  uint8_t data = read_r8(q, cpu);
+  uint8_t data = read_r8(cpu, q);
 
   // first check for half carries
   inc8_half_carry(data, cpu);
@@ -175,7 +172,7 @@ void inc_r8(CPU *cpu) {
 
   clear_flag(cpu, FLAG_N);
 
-  write_r8(data, q, cpu);
+  write_r8(cpu, data, q);
 
   cpu->cycles = 1;
 
@@ -189,7 +186,7 @@ void dec_r8(CPU *cpu) {
 
   uint8_t q = y >> 2;
 
-  uint8_t data = read_r8(q, cpu);
+  uint8_t data = read_r8(cpu, q);
 
   // first check for half carries
   dec8_half_carry(data, cpu);
@@ -203,7 +200,7 @@ void dec_r8(CPU *cpu) {
   }
 
   set_flag(cpu, FLAG_N);
-  write_r8(data, q, cpu);
+  write_r8(cpu, data, q);
 
   cpu->cycles = 1;
 
@@ -216,18 +213,18 @@ void dec_r8(CPU *cpu) {
 void inc_r16(CPU *cpu) {
   uint8_t p = get_p(cpu->opcode);
 
-  uint16_t data = read_r16(p, cpu, false);
+  uint16_t data = read_r16(cpu, p, false);
 
-  write_r16(data += 1, p, cpu);
+  write_r16(cpu, data += 1, p, false);
   cpu->cycles = 2;
 }
 
 void dec_r16(CPU *cpu) {
   uint8_t p = get_p(cpu->opcode);
 
-  uint16_t data = read_r16(p, cpu, false);
+  uint16_t data = read_r16(cpu, p, false);
 
-  write_r16(data -= 1, p, cpu);
+  write_r16(cpu, data -= 1, p, false);
   cpu->cycles = 2;
 }
 
@@ -236,7 +233,7 @@ void ld_r8_imm8(CPU *cpu) {
   uint8_t y = get_y(cpu->opcode);
 
   uint8_t imm8 = read_imm8(cpu);
-  write_r8(imm8, y, cpu);
+  write_r8(cpu, imm8, y);
 
   cpu->cycles = 2;
 
@@ -267,7 +264,7 @@ void rlca(CPU *cpu) {
 }
 
 void rrca(CPU *cpu) {
-  // set carry to lsb and right circle rotate A register
+  // right rotate, setting carry and bit 0
 
   uint8_t lsb = cpu->A & 1;
   cpu->A = (cpu->A >> 1) | (lsb << 7);
@@ -286,13 +283,12 @@ void rrca(CPU *cpu) {
 }
 
 void rla(CPU *cpu) {
-  // set carry to msb and left circle rotate A register
-  uint8_t msb = (cpu->A & (1 << 7)) >> 7;
+  // rotate left
 
-  cpu->A = (cpu->A << 1);
+  uint8_t msb = (cpu->A & (1 << 7)) >> 7;
   cpu->A <<= 1;
 
-  if (is_flag_set(cpu, FLAG_H)) {
+  if (is_flag_set(cpu, FLAG_C)) {
     cpu->A |= 1;
   } else {
     cpu->A &= ~1;
@@ -311,14 +307,11 @@ void rla(CPU *cpu) {
   cpu->cycles = 1;
 }
 void rra(CPU *cpu) {
-  // left rotate A register through C register
-
+  // rotate right
   uint8_t lsb = cpu->A & 1;
-  uint8_t reg_a = read_r8(REG_A, cpu);
-
   cpu->A >>= 1;
 
-  if (is_flag_set(cpu, FLAG_H)) {
+  if (is_flag_set(cpu, FLAG_C)) {
     cpu->A |= 0x80;
   } else {
     cpu->A &= ~0x80;
@@ -409,8 +402,8 @@ void ld_r8_r8(CPU *cpu) {
   uint8_t y = get_y(cpu->opcode);
   uint8_t z = get_z(cpu->opcode);
 
-  uint8_t right_data = read_r8(z, cpu);
-  write_r8(right_data, y, cpu);
+  uint8_t right_data = read_r8(cpu, z);
+  write_r8(cpu, right_data, y);
 
   cpu->cycles = 1;
 
@@ -426,7 +419,7 @@ void alu_r8(CPU *cpu) {}
 
 void add_a_r8(CPU *cpu) {
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
+  uint8_t data = read_r8(cpu, z);
 
   // set flags
   add8_half_carry(data, cpu);
@@ -451,7 +444,7 @@ void add_a_r8(CPU *cpu) {
 
 void addc_a_r8(CPU *cpu) {
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
+  uint8_t data = read_r8(cpu, z);
 
   uint8_t carry = (uint8_t)is_flag_set(cpu, FLAG_C);
 
@@ -480,8 +473,7 @@ void sub_a_r8(CPU *cpu) {
   // A = A - r8
 
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
-
+  uint8_t data = read_r8(cpu, z);
 
   set_flag(cpu, FLAG_N);
   sub8_half_carry(data, cpu);
@@ -491,21 +483,21 @@ void sub_a_r8(CPU *cpu) {
 
   if (cpu->A == 0) {
     set_flag(cpu, FLAG_Z);
-  }
-  else {
+  } else {
     clear_flag(cpu, FLAG_Z);
   }
 
   cpu->cycles = 1;
 
-  if (z == REG_HL_8) cpu->cycles+=1;
+  if (z == REG_HL_8)
+    cpu->cycles += 1;
 }
 
 void subc_a_r8(CPU *cpu) {
   // A = A - r8 - carry
 
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
+  uint8_t data = read_r8(cpu, z);
 
   uint8_t carry = (uint8_t)is_flag_set(cpu, FLAG_C);
   data += carry;
@@ -518,68 +510,64 @@ void subc_a_r8(CPU *cpu) {
 
   if (cpu->A == 0) {
     set_flag(cpu, FLAG_Z);
-  }
-  else {
+  } else {
     clear_flag(cpu, FLAG_Z);
   }
 
   cpu->cycles = 1;
 
-  if (z == REG_HL_8) cpu->cycles+=1;
-
+  if (z == REG_HL_8)
+    cpu->cycles += 1;
 }
 
-void and_a_r8(CPU *cpu){
+void and_a_r8(CPU *cpu) {
 
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
+  uint8_t data = read_r8(cpu, z);
 
   cpu->A &= data;
 
   clear_flag(cpu, FLAG_N);
   clear_flag(cpu, FLAG_C);
   set_flag(cpu, FLAG_H);
-  
-  if(cpu->A == 0) {
+
+  if (cpu->A == 0) {
     set_flag(cpu, FLAG_Z);
-  }
-  else {
+  } else {
     clear_flag(cpu, FLAG_Z);
   }
 
   cpu->cycles = 1;
 
-  if (z == REG_HL_8) cpu->cycles+=1;
-
-
+  if (z == REG_HL_8)
+    cpu->cycles += 1;
 }
 
-void xor_a_r8(CPU *cpu){
+void xor_a_r8(CPU *cpu) {
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
+  uint8_t data = read_r8(cpu, z);
 
   cpu->A ^= data;
   clear_flag(cpu, FLAG_N);
   clear_flag(cpu, FLAG_H);
   clear_flag(cpu, FLAG_C);
 
-  if(cpu->A == 0) {
+  if (cpu->A == 0) {
     set_flag(cpu, FLAG_Z);
-  }
-  else {
+  } else {
     clear_flag(cpu, FLAG_Z);
   }
 
   cpu->cycles = 1;
 
-  if (z == REG_HL_8) cpu->cycles+=1;
+  if (z == REG_HL_8)
+    cpu->cycles += 1;
 }
-
 
 void or_a_r8(CPU *cpu) {
 
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
+  uint8_t data = read_r8(cpu, z);
 
   cpu->A |= data;
 
@@ -587,24 +575,22 @@ void or_a_r8(CPU *cpu) {
   clear_flag(cpu, FLAG_H);
   clear_flag(cpu, FLAG_C);
 
-  if(cpu->A == 0) {
+  if (cpu->A == 0) {
     set_flag(cpu, FLAG_Z);
-  }
-  else {
+  } else {
     clear_flag(cpu, FLAG_Z);
   }
 
   cpu->cycles = 1;
 
-  if (z == REG_HL_8) cpu->cycles+=1;
+  if (z == REG_HL_8)
+    cpu->cycles += 1;
 }
-
 
 void cp_r_r8(CPU *cpu) {
 
   uint8_t z = get_z(cpu->opcode);
-  uint8_t data = read_r8(z, cpu);
-
+  uint8_t data = read_r8(cpu, z);
 
   set_flag(cpu, FLAG_N);
   sub8_half_carry(data, cpu);
@@ -614,17 +600,449 @@ void cp_r_r8(CPU *cpu) {
 
   if (res == 0) {
     set_flag(cpu, FLAG_Z);
-  }
-  else {
+  } else {
     clear_flag(cpu, FLAG_Z);
   }
 
   cpu->cycles = 1;
 
-  if (z == REG_HL_8) cpu->cycles+=1;
+  if (z == REG_HL_8)
+    cpu->cycles += 1;
 }
 
+void push_r16(CPU *cpu) {
+  // pushes value from r16 reg onto the stack
+  // decr sp read
+  uint8_t p = get_p(cpu->opcode);
+  uint16_t data = read_r16(cpu, p, true);
 
+  cpu->SP -= 1;
+  write_word(cpu->SP, data);
+  cpu->SP -= 1;
+
+  cpu->cycles = 4;
+}
+
+void ret_cc(CPU *cpu) {
+  uint8_t y = get_y(cpu->opcode);
+
+  if (condition(cpu, y)) {
+    uint16_t data = read_word(cpu->SP);
+    cpu->SP += 2;
+
+    cpu->PC = data;
+    cpu->cycles = 5;
+  } else {
+    cpu->cycles = 2;
+  }
+}
+
+void ld_0xF000_n_A(CPU *cpu) {
+  uint8_t n = read_imm8(cpu);
+  uint16_t dest = 0xFF00 + n;
+
+  write_byte(dest, cpu->A);
+  cpu->cycles = 3;
+}
+
+void ld_A_0xF000_n(CPU *cpu) {
+  uint8_t n = read_imm8(cpu);
+  uint16_t src = 0xFF00 + n;
+  cpu->A = read_byte(src);
+}
+
+void add_sp_d(CPU *cpu) {
+  int8_t d = displacement(cpu);
+  uint8_t sp_lower = cpu->SP & 0xFF;
+
+  half_carry8(cpu, sp_lower, d);
+  carry8(cpu, sp_lower, d);
+
+  clear_flag(cpu, FLAG_N);
+  clear_flag(cpu, FLAG_Z);
+
+  cpu->SP += d;
+  cpu->cycles = 4;
+}
+
+void ld_hl_sp_e8(CPU *cpu) {
+  int8_t d = displacement(cpu);
+  uint8_t sp_lower = cpu->SP & 0xFF;
+
+  clear_flag(cpu, FLAG_Z);
+  clear_flag(cpu, FLAG_N);
+  half_carry8(cpu, sp_lower, d);
+  carry8(cpu, sp_lower, d);
+
+  write_r16(cpu, cpu->SP + d, REG_HL_16, false);
+
+  cpu->cycles = 3;
+}
+
+void ret(CPU *cpu) {
+  uint16_t data = read_word(cpu->SP);
+  cpu->SP += 2;
+
+  cpu->PC = data;
+  cpu->cycles = 4;
+}
+
+void pop_r16(CPU *cpu) {
+  uint8_t data = read_word(cpu->SP);
+  cpu->SP += 2;
+
+  uint8_t p = get_p(cpu->opcode);
+  write_r16(cpu, data, p, true);
+
+  cpu->cycles = 3;
+}
+
+void ei(CPU *cpu) {
+  // needs to set the interrupt flag AFTER the next instruction
+  // could save current i count then set interrupt flag at ic += 2
+  // could use a bool to keep track of pending interrupt
+  // or a queue where each item is the instruction number that interrupt flag
+  // should be set on
+  cpu->interrupt_delay = true;
+  cpu->cycles = 1;
+}
+
+void reti(CPU *cpu) {
+  uint16_t data = read_word(cpu->SP);
+  cpu->SP += 2;
+
+  cpu->PC = data;
+  cpu->enable_interrupts = true;
+
+  cpu->cycles = 4;
+}
+
+void jp_hl(CPU *cpu) {
+  cpu->PC = read_r16(cpu, REG_HL_16, false);
+  cpu->cycles = 1;
+}
+
+void ld_sp_hl(CPU *cpu) {
+  uint8_t hl = read_r16(cpu, REG_HL_16, false);
+  write_r16(cpu, hl, REG_SP, false);
+}
+
+void jp_cc_nn(CPU *cpu) {
+  uint8_t y = get_y(cpu->opcode);
+
+  if (condition(cpu, y)) {
+    cpu->PC = read_imm16(cpu);
+    cpu->cycles = 4;
+  } else {
+    cpu->cycles = 3;
+  }
+}
+
+void ld_0xFF00_C_A(CPU *cpu) {
+  uint8_t dest = 0xFF00 + cpu->C;
+  write_byte(dest, cpu->A);
+  cpu->cycles = 2;
+}
+
+void ld_A_0xFF00_C(CPU *cpu) {
+  uint8_t dest = 0xFF00 + cpu->C;
+  cpu->A = read_byte(dest);
+  cpu->cycles = 2;
+}
+
+void ld_nn_a(CPU *cpu) {
+  uint8_t dest = read_imm16(cpu);
+  write_byte(dest, cpu->A);
+  cpu->cycles = 4;
+}
+
+void ld_a_nn(CPU *cpu) {
+  uint8_t src = read_imm16(cpu);
+  cpu->A = read_byte(src);
+  cpu->cycles = 4;
+}
+
+void jp_nn(CPU *cpu) {
+  cpu->PC = read_imm16(cpu);
+  cpu->cycles = 4;
+}
+
+void rlc_r8(CPU *cpu) {
+    uint8_t z = get_z(cpu->opcode);
+
+    uint8_t data = read_r8(cpu, z);
+    uint8_t msb = (data & 0x80) >> 7;
+
+    uint8_t rl = (data << 1) | msb;
+    write_r8(cpu, rl, z);
+
+    if(rl == 0) {
+        set_flag(cpu, FLAG_Z);
+    }
+    else {
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_N);
+
+    if (msb) {
+      set_flag(cpu, FLAG_C);
+    } else {
+      clear_flag(cpu, FLAG_C);
+    }
+
+    if(z == 6){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
+
+void rrc_r8(CPU *cpu) {
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_r8(cpu, z);
+
+    uint8_t lsb = data & 1;
+    uint8_t rrc = (data >> 1) | (lsb << 7);
+    write_r8(cpu, rrc, z);
+
+    if(rrc == 0) {
+        set_flag(cpu, FLAG_Z);
+    }
+    else{
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_N);
+
+    if (lsb) {
+      set_flag(cpu, FLAG_C);
+    } else {
+      clear_flag(cpu, FLAG_C);
+    }
+
+    if(z == 6){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+
+}
+
+void rl_r8(CPU *cpu) {
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_r8(cpu, z);
+
+    uint8_t msb = (data & (1 << 7)) >> 7;
+    data <<= 1;
+
+    if (is_flag_set(cpu, FLAG_C)) {
+      data |= 1;
+    } else {
+      data &= ~1;
+    }
+
+    write_r8(cpu, data, z);
+
+    if(data == 0){
+        set_flag(cpu, FLAG_Z);
+    }
+    else{
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_N);
+
+    if (msb) {
+      set_flag(cpu, FLAG_C);
+    } else {
+      clear_flag(cpu, FLAG_C);
+    }
+
+    if(z == 6){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
+
+void rr_r8(CPU *cpu) {
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_r8(cpu, z);
+
+    uint8_t lsb = data & 1;
+
+    data >>= 1;
+
+    if (is_flag_set(cpu, FLAG_C)) {
+      data |= 0x80;
+    } else {
+      data &= ~0x80;
+    }
+
+    write_r8(cpu, data, z);
+
+    if(data == 0){
+        set_flag(cpu, FLAG_Z);
+    }
+    else{
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_N);
+
+    if (lsb) {
+      set_flag(cpu, FLAG_C);
+    } else {
+      clear_flag(cpu, FLAG_C);
+    }
+
+    if(z == 6){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
+
+void sla_r8(CPU *cpu) {
+   uint8_t z = get_z(cpu->opcode);
+   uint8_t data = read_r8(cpu, z);
+
+   uint8_t msb = (data & 0x80) >> 7;
+   data <<= 1;
+
+   write_r8(cpu, data, z);
+
+   if(data == 0){
+       set_flag(cpu, FLAG_Z);
+   }
+   else{
+       clear_flag(cpu, FLAG_Z);
+   }
+
+   clear_flag(cpu, FLAG_H);
+   clear_flag(cpu, FLAG_N);
+
+   if(msb){
+       set_flag(cpu, FLAG_C);
+   }
+   else {
+       clear_flag(cpu, FLAG_C);
+   }
+
+   if(z == 6){
+       cpu->cycles = 4;
+   }
+   else {
+       cpu->cycles = 2;
+   }
+}
+
+void sra_r8(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_r8(cpu, z);
+
+    uint8_t lsb = data & 1;
+    uint8_t msb = data & 0x80;
+
+    data = (data >> 1) | msb;
+
+    write_r8(cpu, data, z);
+
+    if(data == 0){
+        set_flag(cpu, FLAG_Z);
+    }
+    else{
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_N);
+
+    if(lsb){
+        set_flag(cpu, FLAG_C);
+    }
+    else {
+        clear_flag(cpu, FLAG_C);
+    }
+
+    if(z == 6){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
+
+void swap_r8(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_r8(cpu, z);
+
+    data = (data >> 4) | (data << 4) ;
+
+    write_r8(cpu, data, z);
+
+    if(data == 0){
+        set_flag(cpu, FLAG_Z);
+    }
+    else{
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_N);
+    clear_flag(cpu, FLAG_C);
+
+    if(z == 6){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
+
+void srl_r8(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_r8(cpu, z);
+
+    uint8_t lsb = data & 1;
+
+    data >>= 1;
+
+    write_r8(cpu, data, z);
+
+    if(data == 0){
+        set_flag(cpu, FLAG_Z);
+    }
+    else{
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_N);
+
+    if(lsb){
+        set_flag(cpu, FLAG_C);
+    }
+    else {
+        clear_flag(cpu, FLAG_C);
+    }
+
+    if(z == 6){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
 
 
 
@@ -634,7 +1052,47 @@ void cp_r_r8(CPU *cpu) {
 //
 
 void decode_instruction(CPU *cpu) {
+
+  if (cpu->interrupt_delay) {
+    cpu->interrupt_delay = false;
+    cpu->enable_interrupts = true;
+  } else if (cpu->enable_interrupts) {
+    cpu->ime = true;
+  }
+
   cpu->opcode = read_byte(cpu->PC++);
+
+  // check for prefix byte first
+
+  switch (cpu->opcode) {
+  case 0xCB:
+    cpu->opcode = read_byte(cpu->PC++);
+    uint8_t x = get_x(cpu->opcode);
+
+    switch (x) {
+    case 0:
+      rot(cpu);
+      return;
+    case 1:
+      bit(cpu);
+      return;
+    case 2:
+      res(cpu);
+      break;
+    case 3:
+      set(cpu);
+      break;
+    }
+  case 0xDD:
+    cpu->opcode = read_byte(cpu->PC++);
+    return;
+  case 0xED:
+    cpu->opcode = read_byte(cpu->PC++);
+    return;
+  case 0xFD:
+    cpu->opcode = read_byte(cpu->PC++);
+    return;
+  }
 
   uint8_t x = get_x(cpu->opcode);
 

@@ -18,7 +18,7 @@ bool is_flag_set(CPU *cpu, Flags flag) {
     return (cpu->F & (uint8_t)flag) != 0;
 }
 
-bool condition(uint8_t idx, CPU *cpu){
+bool condition(CPU *cpu, uint8_t idx){
     switch (idx){
         case 0:
         // NZ
@@ -68,7 +68,11 @@ uint16_t read_imm16(CPU *cpu){
     return data;
 }
 
-uint8_t read_r8(Reg8 reg, CPU *cpu) {
+int8_t displacment(CPU *cpu) {
+    return (int8_t)read_imm8(cpu);
+}
+
+uint8_t read_r8(CPU *cpu, Reg8 reg) {
     switch (reg) {
         case REG_B:
             return cpu->B;
@@ -92,7 +96,7 @@ uint8_t read_r8(Reg8 reg, CPU *cpu) {
     return 0x0;
 }
 
-uint16_t read_r16(Reg16 reg, CPU *cpu, bool has_sp) {
+uint16_t read_r16(CPU *cpu, Reg16 reg, bool has_af) {
     switch (reg) {
         case REG_BC:
             return (cpu->B << 8) | cpu->C;
@@ -104,11 +108,11 @@ uint16_t read_r16(Reg16 reg, CPU *cpu, bool has_sp) {
             return (cpu->H << 8) | cpu->L;
 
         case REG_AF:
-            if (has_sp){
-                return cpu->SP;
+            if (has_af){
+                return (cpu->A << 8) | cpu->F;
             }
             else{
-                return (cpu->A << 8) | cpu->F;
+                return cpu->SP;
             }
     }
 
@@ -117,7 +121,7 @@ uint16_t read_r16(Reg16 reg, CPU *cpu, bool has_sp) {
 
 }
 
-void write_r16(uint16_t data, Reg16 reg, CPU *cpu){
+void write_r16(CPU *cpu, uint16_t data, Reg16 reg, bool has_af){
     switch (reg) {
         case REG_BC:
             cpu->B = data >> 8;
@@ -135,13 +139,21 @@ void write_r16(uint16_t data, Reg16 reg, CPU *cpu){
             break;
 
         // todo: add support for AF reg too
+        //
+
         case REG_SP:
-            cpu->SP = data;
-            break;
+            if(has_af) {
+                cpu->A = data >> 8;
+                cpu->F = data & 0xFF;
+            }
+            else {
+                cpu->SP = data;
+                break;
+            }
     }
 }
 
-void write_r8(uint8_t data, Reg8 reg, CPU *cpu){
+void write_r8(CPU *cpu, uint8_t data, Reg8 reg){
     switch (reg) {
         case REG_B:
             cpu->B = data;
@@ -168,7 +180,7 @@ void write_r8(uint8_t data, Reg8 reg, CPU *cpu){
 
         case REG_HL_8:
             {
-                uint16_t addr = read_r16(REG_HL_16, cpu, false);
+                uint16_t addr = read_r16(cpu, REG_HL_16, false);
                 write_byte(addr, data);
 
             }
@@ -264,3 +276,24 @@ void sub8_carry(const uint8_t value, CPU *cpu){
 
 }
 
+void half_carry8(CPU *cpu, uint8_t a, uint8_t b){
+    clear_flag(cpu, FLAG_H);
+
+    uint8_t mask = 0xF;
+
+    uint8_t a_half = a & mask;
+    uint8_t b_half = a & mask;
+
+    if(a_half + b_half > 0xF) {
+        set_flag(cpu, FLAG_H);
+    }
+}
+
+void carry8(CPU *cpu, uint8_t a, uint8_t b){
+    clear_flag(cpu, FLAG_C);
+
+    if(a + b > 0xFF) {
+        set_flag(cpu, FLAG_C);
+    }
+
+}
