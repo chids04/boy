@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 
-// define the structure for gameboy memory
 typedef struct {
     uint8_t memory[0x10000]; // 0xFFFF is 65535, so 0x10000 bytes for a full 64KB address space
 } GBMem;
