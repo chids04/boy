@@ -698,13 +698,13 @@ void pop_r16(CPU *cpu) {
 }
 
 void ei(CPU *cpu) {
-  // needs to set the interrupt flag AFTER the next instruction
-  // could save current i count then set interrupt flag at ic += 2
-  // could use a bool to keep track of pending interrupt
-  // or a queue where each item is the instruction number that interrupt flag
-  // should be set on
   cpu->interrupt_delay = true;
   cpu->cycles = 1;
+}
+
+void di(CPU *cpu) {
+    cpu->interrupt_delay = false;
+    cpu->ime = false;
 }
 
 void reti(CPU *cpu) {

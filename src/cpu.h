@@ -174,7 +174,6 @@ void ld_hl_sp_e8(CPU *cpu);
 // z = 1
 void pop_r16(CPU *cpu);
 void ret(CPU *cpu);
-void ei(CPU *cpu);
 void reti(CPU *cpu);
 void jp_hl(CPU *cpu);
 void ld_sp_hl(CPU *cpu);
@@ -188,6 +187,11 @@ void ld_a_nn(CPU *cpu);
 
 // z = 3
 void jp_nn(CPU *cpu);
+void ei(CPU *cpu);
+void di(CPU *cpu);
+
+// z = 4
+void call_r16(CPU *cpu);
 
 // CB Prefix
 void rlc_r8(CPU *cpu);
@@ -198,7 +202,6 @@ void sla_r8(CPU *cpu);
 void sra_r8(CPU *cpu);
 void swap_r8(CPU *cpu);
 void srl_r8(CPU *cpu);
-
 
 // utils for common cpu operations //
 
