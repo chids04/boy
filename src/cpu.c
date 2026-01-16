@@ -1,6 +1,7 @@
 #include "cpu.h"
 #include "gb_mem.h"
 
+#include <iso646.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -415,8 +416,6 @@ void ld_r8_r8(CPU *cpu) {
 
 void halt(CPU *cpu) { printf("halt(): instruction not implemented\n"); }
 
-void alu_r8(CPU *cpu) {}
-
 void add_a_r8(CPU *cpu) {
   uint8_t z = get_z(cpu->opcode);
   uint8_t data = read_r8(cpu, z);
@@ -442,7 +441,7 @@ void add_a_r8(CPU *cpu) {
   }
 }
 
-void addc_a_r8(CPU *cpu) {
+void adc_a_r8(CPU *cpu) {
   uint8_t z = get_z(cpu->opcode);
   uint8_t data = read_r8(cpu, z);
 
@@ -587,7 +586,7 @@ void or_a_r8(CPU *cpu) {
     cpu->cycles += 1;
 }
 
-void cp_r_r8(CPU *cpu) {
+void cp_a_r8(CPU *cpu) {
 
   uint8_t z = get_z(cpu->opcode);
   uint8_t data = read_r8(cpu, z);
@@ -610,18 +609,6 @@ void cp_r_r8(CPU *cpu) {
     cpu->cycles += 1;
 }
 
-void push_r16(CPU *cpu) {
-  // pushes value from r16 reg onto the stack
-  // decr sp read
-  uint8_t p = get_p(cpu->opcode);
-  uint16_t data = read_r16(cpu, p, true);
-
-  cpu->SP -= 1;
-  write_word(cpu->SP, data);
-  cpu->SP -= 1;
-
-  cpu->cycles = 4;
-}
 
 void ret_cc(CPU *cpu) {
   uint8_t y = get_y(cpu->opcode);
@@ -688,7 +675,7 @@ void ret(CPU *cpu) {
 }
 
 void pop_r16(CPU *cpu) {
-  uint8_t data = read_word(cpu->SP);
+  uint16_t data = read_word(cpu->SP);
   cpu->SP += 2;
 
   uint8_t p = get_p(cpu->opcode);
@@ -697,15 +684,6 @@ void pop_r16(CPU *cpu) {
   cpu->cycles = 3;
 }
 
-void ei(CPU *cpu) {
-  cpu->interrupt_delay = true;
-  cpu->cycles = 1;
-}
-
-void di(CPU *cpu) {
-    cpu->interrupt_delay = false;
-    cpu->ime = false;
-}
 
 void reti(CPU *cpu) {
   uint16_t data = read_word(cpu->SP);
@@ -766,6 +744,227 @@ void jp_nn(CPU *cpu) {
   cpu->PC = read_imm16(cpu);
   cpu->cycles = 4;
 }
+
+void ei(CPU *cpu) {
+  cpu->interrupt_delay = true;
+  cpu->cycles = 1;
+}
+
+void di(CPU *cpu) {
+    cpu->interrupt_delay = false;
+    cpu->ime = false;
+}
+
+void call_16_cc(CPU *cpu) {
+    uint8_t y = get_y(cpu->opcode);
+
+    if(condition(cpu, y)){
+        uint16_t r16 = read_imm16(cpu);
+        cpu->SP -= 2;
+        write_word(cpu->SP, cpu->PC);
+
+        // set pc
+        cpu->PC = r16;
+
+        cpu->cycles = 6;
+
+    }
+    else{
+        cpu->cycles = 3;
+    }
+}
+
+void add_a_n(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    // set flags
+    add8_half_carry(data, cpu);
+    add8_carry(data, cpu);
+    clear_flag(cpu, FLAG_N);
+
+    cpu->A += data;
+
+    if (cpu->A == 0) {
+      set_flag(cpu, FLAG_Z);
+    } else {
+      clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 2;
+}
+
+void adc_a_n(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    uint8_t carry = (uint8_t)is_flag_set(cpu, FLAG_C);
+
+    // set flags
+    add8_half_carry(data + carry, cpu);
+    add8_carry(data + carry, cpu);
+    clear_flag(cpu, FLAG_N);
+
+    cpu->A += data + carry;
+
+    if (cpu->A == 0) {
+      set_flag(cpu, FLAG_Z);
+    } else {
+      clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 2;
+}
+
+void sub_a_n(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    set_flag(cpu, FLAG_N);
+    sub8_half_carry(data, cpu);
+    sub8_carry(data, cpu);
+
+    cpu->A -= data;
+
+    if (cpu->A == 0) {
+      set_flag(cpu, FLAG_Z);
+    } else {
+      clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 2;
+}
+
+void sbc_a_n(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    uint8_t carry = (uint8_t)is_flag_set(cpu, FLAG_C);
+    data += carry;
+
+    set_flag(cpu, FLAG_N);
+    sub8_half_carry(data, cpu);
+    sub8_carry(data, cpu);
+
+    cpu->A -= data;
+
+    if (cpu->A == 0) {
+    set_flag(cpu, FLAG_Z);
+    } else {
+    clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 2;
+
+}
+
+void and_a_n(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    cpu->A &= data;
+
+    clear_flag(cpu, FLAG_N);
+    clear_flag(cpu, FLAG_C);
+    set_flag(cpu, FLAG_H);
+
+    if (cpu->A == 0) {
+    set_flag(cpu, FLAG_Z);
+    } else {
+    clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 1;
+
+}
+
+void xor_a_n(CPU *cpu){
+
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    cpu->A ^= data;
+    clear_flag(cpu, FLAG_N);
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_C);
+
+    if (cpu->A == 0) {
+        set_flag(cpu, FLAG_Z);
+    } else {
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 2;
+}
+
+void or_a_n(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    cpu->A |= data;
+
+    clear_flag(cpu, FLAG_N);
+    clear_flag(cpu, FLAG_H);
+    clear_flag(cpu, FLAG_C);
+
+    if (cpu->A == 0) {
+      set_flag(cpu, FLAG_Z);
+    } else {
+      clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 2;
+
+}
+
+void cp_a_n(CPU *cpu){
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t data = read_imm8(cpu);
+
+    set_flag(cpu, FLAG_N);
+    sub8_half_carry(data, cpu);
+    sub8_carry(data, cpu);
+
+    uint8_t res = cpu->A - data;
+
+    if (res == 0) {
+      set_flag(cpu, FLAG_Z);
+    } else {
+      clear_flag(cpu, FLAG_Z);
+    }
+
+    cpu->cycles = 2;
+}
+
+
+void call_r16(CPU *cpu) {
+    // pc already incremented at the beginning of opcode handler
+    uint16_t r16 = read_imm16(cpu);
+
+    // pc will be holding the address of instruction to save
+
+    // push this to the stack
+    cpu->SP -= 2;
+    write_word(cpu->SP, cpu->PC);
+
+    // set pc
+    cpu->PC = r16;
+
+    cpu->cycles = 6;
+}
+
+void push_r16(CPU *cpu) {
+  // pushes value from r16 reg onto the stack
+  // decr sp read
+  uint8_t p = get_p(cpu->opcode);
+  uint16_t data = read_r16(cpu, p, true);
+
+  cpu->SP -= 2;
+  write_word(cpu->SP, data);
+
+  cpu->cycles = 4;
+}
+
 
 void rlc_r8(CPU *cpu) {
     uint8_t z = get_z(cpu->opcode);

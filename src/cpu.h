@@ -150,16 +150,16 @@ void ld_r8_r8(CPU *cpu);
 void halt(CPU *cpu);
 
 // x = 2
-void alu_r8(CPU *cpu);
 
 // alu ops
 void add_a_r8(CPU *cpu);
+void adc_a_r8(CPU *cpu);
 void sub_a_r8(CPU *cpu);
 void subc_a_r8(CPU *cpu);
 void and_a_r8(CPU *cpu);
 void xor_a_r8(CPU *cpu);
 void or_a_r8(CPU *cpu);
-void cp_r_r8(CPU *cpu);
+void cp_a_r8(CPU *cpu);
 
 
 // x = 3
@@ -191,7 +191,22 @@ void ei(CPU *cpu);
 void di(CPU *cpu);
 
 // z = 4
+void call_16_cc(CPU *cpu);
+
+// z = 5
 void call_r16(CPU *cpu);
+void push_r16(CPU *cpu);
+
+// z = 7
+// alu ops on 8 bit immediate value
+void add_a_n(CPU *cpu);
+void adc_a_n(CPU *cpu);
+void sub_a_n(CPU *cpu);
+void sbc_a_n(CPU *cpu);
+void and_a_n(CPU *cpu);
+void xor_a_n(CPU *cpu);
+void or_a_n(CPU *cpu);
+void cp_a_n(CPU *cpu);
 
 // CB Prefix
 void rlc_r8(CPU *cpu);
