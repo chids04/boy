@@ -991,7 +991,7 @@ void rlc_r8(CPU *cpu) {
       clear_flag(cpu, FLAG_C);
     }
 
-    if(z == 6){
+    if(z == REG_HL_8){
         cpu->cycles = 4;
     }
     else {
@@ -1023,7 +1023,7 @@ void rrc_r8(CPU *cpu) {
       clear_flag(cpu, FLAG_C);
     }
 
-    if(z == 6){
+    if(z == REG_HL_8){
         cpu->cycles = 4;
     }
     else {
@@ -1063,7 +1063,7 @@ void rl_r8(CPU *cpu) {
       clear_flag(cpu, FLAG_C);
     }
 
-    if(z == 6){
+    if(z == REG_HL_8){
         cpu->cycles = 4;
     }
     else {
@@ -1103,7 +1103,7 @@ void rr_r8(CPU *cpu) {
       clear_flag(cpu, FLAG_C);
     }
 
-    if(z == 6){
+    if(z == REG_HL_8){
         cpu->cycles = 4;
     }
     else {
@@ -1137,7 +1137,7 @@ void sla_r8(CPU *cpu) {
        clear_flag(cpu, FLAG_C);
    }
 
-   if(z == 6){
+   if(z == REG_HL_8){
        cpu->cycles = 4;
    }
    else {
@@ -1173,7 +1173,7 @@ void sra_r8(CPU *cpu){
         clear_flag(cpu, FLAG_C);
     }
 
-    if(z == 6){
+    if(z == REG_HL_8){
         cpu->cycles = 4;
     }
     else {
@@ -1200,7 +1200,7 @@ void swap_r8(CPU *cpu){
     clear_flag(cpu, FLAG_N);
     clear_flag(cpu, FLAG_C);
 
-    if(z == 6){
+    if(z == REG_HL_8){
         cpu->cycles = 4;
     }
     else {
@@ -1235,12 +1235,76 @@ void srl_r8(CPU *cpu){
         clear_flag(cpu, FLAG_C);
     }
 
-    if(z == 6){
+    if(z == REG_HL_8){
         cpu->cycles = 4;
     }
     else {
         cpu->cycles = 2;
     }
+}
+
+void bit_y_r8(CPU *cpu){
+    // check if bit y is set
+    // shift y times then mask off all upper 7 bits
+
+    uint8_t y = get_y(cpu->opcode);
+    uint8_t z = get_z(cpu->opcode);
+
+    uint8_t bit_y = (read_r8(cpu, z) >> y) & 1;
+
+    if(bit_y == 0) {
+        set_flag(cpu, FLAG_Z);
+    }
+    else {
+        clear_flag(cpu, FLAG_Z);
+    }
+
+    clear_flag(cpu, FLAG_N);
+    set_flag(cpu, FLAG_H);
+
+    if (z == REG_HL_8){
+        cpu->cycles = 3;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
+
+void res_y_r8(CPU *cpu){
+    uint8_t mask = ~(1 << get_y(cpu->opcode));
+
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t old = read_r8(cpu, z);
+
+    uint8_t new = old | mask;
+
+    write_r8(cpu, new, z);
+
+    if (z == REG_HL_8){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+}
+
+void set_y_r8(CPU *cpu){
+    uint8_t mask = (1 << get_y(cpu->opcode));
+
+    uint8_t z = get_z(cpu->opcode);
+    uint8_t old = read_r8(cpu, z);
+
+    uint8_t new = old | mask;
+
+    write_r8(cpu, new, z);
+
+    if (z == REG_HL_8){
+        cpu->cycles = 4;
+    }
+    else {
+        cpu->cycles = 2;
+    }
+
 }
 
 
