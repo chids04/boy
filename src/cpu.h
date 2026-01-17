@@ -152,6 +152,7 @@ void halt(CPU *cpu);
 // x = 2
 
 // alu ops
+void alu_a_r8(CPU *cpu);
 void add_a_r8(CPU *cpu);
 void adc_a_r8(CPU *cpu);
 void sub_a_r8(CPU *cpu);
@@ -166,10 +167,12 @@ void cp_a_r8(CPU *cpu);
 
 // z = 0
 void ret_cc(CPU *cpu);
-void ld_0xF000_n_A(CPU *cpu);
-void ld_A_0xF000_n(CPU *cpu);
+void ld_0xFF00_n_A(CPU *cpu);
+void ld_A_0xFF00_n(CPU *cpu);
+
+
 void add_sp_d(CPU *cpu);
-void ld_hl_sp_e8(CPU *cpu);
+void ld_hl_sp_d(CPU *cpu);
 
 // z = 1
 void pop_r16(CPU *cpu);
@@ -191,24 +194,31 @@ void ei(CPU *cpu);
 void di(CPU *cpu);
 
 // z = 4
-void call_16_cc(CPU *cpu);
+void call_cc_nn(CPU *cpu);
 
 // z = 5
-void call_r16(CPU *cpu);
+void call_nn(CPU *cpu);
 void push_r16(CPU *cpu);
 
-// z = 7
+// z = 6
 // alu ops on 8 bit immediate value
+void alu_a_n(CPU *cpu);
 void add_a_n(CPU *cpu);
 void adc_a_n(CPU *cpu);
 void sub_a_n(CPU *cpu);
-void sbc_a_n(CPU *cpu);
+void subc_a_n(CPU *cpu);
 void and_a_n(CPU *cpu);
 void xor_a_n(CPU *cpu);
 void or_a_n(CPU *cpu);
 void cp_a_n(CPU *cpu);
 
+// z = 7
+void rst(CPU *cpu);
+
 // CB Prefix
+
+// x = 0
+void rot(CPU *cpu);
 void rlc_r8(CPU *cpu);
 void rrc_r8(CPU *cpu);
 void rl_r8(CPU *cpu);
@@ -217,6 +227,12 @@ void sla_r8(CPU *cpu);
 void sra_r8(CPU *cpu);
 void swap_r8(CPU *cpu);
 void srl_r8(CPU *cpu);
+
+// x = 1
+void bit_y_r8(CPU *cpu);
+void res_y_r8(CPU *cpu);
+void set_y_r8(CPU *cpu);
+
 
 // utils for common cpu operations //
 
