@@ -1,6 +1,6 @@
 #include <cstdint>
 #include <gtest/gtest.h>
-#include "cpu-test.h"
+#include "cpu_test.h"
 #include "cpu.h"
 #include "gb_mem.h"
 

@@ -802,31 +802,31 @@ void call_cc_nn(CPU *cpu) {
 
 void alu_a_n(CPU *cpu) {
   switch (get_y(cpu->opcode)) {
-    case 0:
-        add_a_n(cpu);
-        return;
-    case 1:
-        adc_a_n(cpu);
-        return;
-    case 2:
-        sub_a_n(cpu);
-        return;
-    case 3:
-        subc_a_n(cpu);
-        return;
-    case 4:
-        and_a_n(cpu);
-        return;
-    case 5:
-        xor_a_n(cpu);
-        return;
-    case 6:
-        or_a_n(cpu);
-        return;
-    case 7:
-        cp_a_n(cpu);
-        return;
-    }
+  case 0:
+    add_a_n(cpu);
+    return;
+  case 1:
+    adc_a_n(cpu);
+    return;
+  case 2:
+    sub_a_n(cpu);
+    return;
+  case 3:
+    subc_a_n(cpu);
+    return;
+  case 4:
+    and_a_n(cpu);
+    return;
+  case 5:
+    xor_a_n(cpu);
+    return;
+  case 6:
+    or_a_n(cpu);
+    return;
+  case 7:
+    cp_a_n(cpu);
+    return;
+  }
 }
 
 void add_a_n(CPU *cpu) {
@@ -1016,18 +1016,17 @@ void push_r16(CPU *cpu) {
   cpu->cycles = 4;
 }
 
-void rst(CPU *cpu){
+void rst(CPU *cpu) {
 
-    // no op cus of rst bug in tetris lol
+  // no op cus of rst bug in tetris lol
 
-    // uint16_t addr = get_y(cpu->opcode) * 8;
+  // uint16_t addr = get_y(cpu->opcode) * 8;
 
-    // cpu->SP -= 2;
-    // write_word(cpu->SP, addr);
-    // cpu->PC = addr;
+  // cpu->SP -= 2;
+  // write_word(cpu->SP, addr);
+  // cpu->PC = addr;
 
-    // cpu->cycles = 4;
-
+  // cpu->cycles = 4;
 }
 
 void rot(CPU *cpu) {
@@ -1740,15 +1739,15 @@ void decode_instruction(CPU *cpu) {
 
     // z = 6
     case 6: {
-        alu_a_n(cpu);
-        return;
+      alu_a_n(cpu);
+      return;
     }
 
     case 7: {
-        rst(cpu);
-        return;
+      rst(cpu);
+      return;
     }
     }
   }
-
   }
+}

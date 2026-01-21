@@ -25,6 +25,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(googletest)
 
+
+add_executable(
+    gb_emu
+    src/main.c
+)
+
+target_link_libraries(gb_emu GbCore)
+
+
 enable_testing()
 
 add_executable(run_tests
