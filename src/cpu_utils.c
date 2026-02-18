@@ -68,7 +68,7 @@ uint16_t read_imm16(CPU *cpu){
     return data;
 }
 
-int8_t displacment(CPU *cpu) {
+int8_t displacement(CPU *cpu) {
     return (int8_t)read_imm8(cpu);
 }
 
