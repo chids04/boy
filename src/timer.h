@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include "utils.h"
 
-// need a hook that catches all writes to TMA and checks whethere a pending tima reset is happening so that we ensure TMA is set before it copied to TIMA
+// need a hook that catches all writes to TMA and checks whethere a pending tima reset is about to occur so that we ensure TMA is set before it copied to TIMA
 //
 
 typedef struct {
@@ -42,7 +42,6 @@ bool is_tima_incrementing(Timers *timers) {
 }
 
 void increment_timers(Timers* timers, int m_cycles) {
-
     // incremented every M cycle ( 4 T Cycles )
 
     timers->DIV += m_cycles * 4; // meant to be incremented every T cycle
@@ -79,7 +78,7 @@ void increment_timers(Timers* timers, int m_cycles) {
             timers->pending_tima_reset = false;
         }
     }
-    else if(and_result == 0 && timers->prev_and_result == 1){
+    else if(and_result == 0 && timers->prev_and_result == 1 && !timers->pending_tima_reset){
         inc_tima(timers);
     }
 
