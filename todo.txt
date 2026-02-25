@@ -1,1 +1,14 @@
 read_r16 and write_r16 have different has_SP and has_AF boolean checks these need to be unified into one
+
+timing implementation
+
+instead of returning the number of cycles passed after every instruction and getting the timers, ppu, dma to catch up,
+
+i can tick inside the cpu mid instruction
+the tick function will tick the timers, and i can also tick just before a mem read/write is about to occur too
+
+other components that rely on the timer are the PPU, APU and timer
+
+goals
+get the cpu instruction test rom loaded and running
+need to at least know that i can fetch decode and execute instructions and know

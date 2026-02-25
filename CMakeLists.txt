@@ -10,6 +10,9 @@ add_library(GbCore
     src/cpu.c
     src/cpu_utils.c
     src/utils.h
+    src/mmu.h
+    src/mmu.c
+    src/timer.h
 )
 
 target_include_directories(GbCore PUBLIC src)
