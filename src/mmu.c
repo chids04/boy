@@ -6,35 +6,109 @@ struct mmu* init_mmu(uint8_t *rom){
     mmu->rom = rom;
 
     mmu->mbc.mbc_type = mmu->rom[0x0147];
+
     mmu->ram_size = mmu->rom[0x0149];
     mmu->rom_size = mmu->rom[0x0148];
 
-    mmu->rom = malloc(mmu->rom_size);
-    mmu->ram = malloc(mmu->ram_size);
-    // init the different mbc
-
+    mmu->rom = rom;
+    mmu->ram = malloc(ram_size_bytes(mmu->ram_size));
 
     return mmu;
 }
 
 uint8_t read_byte(struct mmu *mmu, uint16_t address) {
+    if(address >= ROM_BANK0_START && address <= ROM_BANK1_END){
+        // handle cartridge read
+        // may need to tick timers inside the mbc to handle the timing differences
+        return handle_cart_read(mmu, address);
+    }
+    else if(address >= VRAM_START && address <= VRAM_END){
+        fprintf(stderr, "VRAM handler for address 0x%04X not implemented", address);
+        // handle vram reads here
+        // not implemented yet
+
+    }
+    else if(address >= SRAM_START && address <= SRAM_END){
+        // handle external ram read here
+        fprintf(stderr, "SRAM handler for address 0x%04X not implemented", address);
+    }
+    else if(address >= 0xE000 && address <= 0xFDFF){
+        // handle echo ram
+        // technically use of this area is prohibted so no need to emulate
+        fprintf(stderr, "ECHO RAM handler for address 0x%04X not implemented", address);
+    }
+    else if(address >= 0xFE00 && address <= 0xFE9F){
+        // handle oam
+        fprintf(stderr, "OAM handler for address 0x%04X not implemented", address);
+    }
+    else if(address >= 0xFEA0 && address <= 0xFEFF){
+        // use of this area prohibited
+        fprintf(stderr, "prohibited area handler for address 0x%04X not implemented", address);
+    }
+    else if(address >= 0xFF00 && address <=0xFF7F){
+        // handle IO registers
+        fprintf(stderr, "IO handler for address 0x%04X not implemented", address);
+    }
+    else if(address >= 0xFF80 && address <= 0xFFE){
+        // handle HRAM
+        fprintf(stderr, "HRAM handler for address 0x%04X not implemented", address);
+    }
+}
+
+uint8_t handle_cart_read(struct mmu *mmu, uint16_t address){
     switch (mmu->mbc.mbc_type){
         case MBC_NONE:
             break;
         case MBC_NONE_RAM:
-        break;
+            break;
         case MBC_NONE_BATTERY_RAM:
         break;
         case MBC_1:
         case MBC_1_RAM:
         case MBC_1_BATTERY_RAM:
-            return handle_mbc1_read(mmu, address);
+            //return handle_mbc1_read(mmu, address);
 
+        default:
+            fprintf(stderr, "read_byte: mbc unimplemented");
+    }
+}
+
+
+void write_byte(struct mmu *mmu, uint16_t address, uint8_t data){
+    if(address >= ROM_BANK0_START && address <= ROM_BANK1_END){
+        // handle cartridge write
+        // may need to tick timers inside the mbc to handle the timing differences
+        handle_cart_write(mmu, address, data);
+
+    }
+    else if(address >= VRAM_START && address <= VRAM_END){
+        // handle vram writes here
+        // not implemented yet
+
+    }
+    else if(address >= SRAM_START && address <= SRAM_END){
+        // handle external ram write here
+    }
+    else if(address >= 0xE000 && address <= 0xFDFF){
+        // handle echo ram
+        // technically use of this area is prohibted so no need to emulate
+    }
+    else if(address >= 0xFE00 && address <= 0xFE9F){
+        // handle oam
+    }
+    else if(address >= 0xFEA0 && address <= 0xFEFF){
+        // use of this area prohibited
+    }
+    else if(address >= 0xFF00 && address <=0xFF7F){
+        // handle IO registers
+    }
+    else if(address >= 0xFF80 && address <= 0xFFE){
+        // handle HRAM
     }
 
 }
-void write_byte(struct mmu *mmu, uint16_t address, uint8_t data){
 
+void handle_cart_write(struct mmu *mmu, uint16_t address, uint8_t data){
     switch (mmu->mbc.mbc_type){
         case MBC_NONE:
             break;
@@ -126,6 +200,7 @@ void handle_mbc1_write(struct mmu *mmu, uint16_t address, uint8_t data){
         mmu->ram[ram_offset] = data;
     }
 }
+
 
 uint8_t handle_mbc1_read(struct mmu *mmu, uint16_t address){
 

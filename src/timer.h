@@ -66,12 +66,10 @@ void increment_timers(Timers* timers, int m_cycles) {
             break;
     }
 
-
     uint8_t timer_enable = get_bit(timers->TAC, 2);
     uint8_t and_result = timer_enable & selected_bit;
 
     // first check for if pending TMA reset
-
     if(timers->pending_tima_reset) {
         if(timers->DIV >= timers->cycles_at_reset + 8){
             timers->TIMA = timers->TMA;
