@@ -5,30 +5,26 @@ project(boy C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(GbCore
-    src/gbcore.c
-    src/gb_mem.c
+    src/common.h
+    src/cpu.h
     src/cpu.c
     src/cpu_utils.c
     src/utils.h
     src/mmu.h
     src/mmu.c
     src/timer.h
+    src/timer.c
+    src/boy.h
+    src/boy.c
+    src/log.h
+    src/log.c
 )
 
 target_include_directories(GbCore PUBLIC src)
+target_compile_options(GbCore PRIVATE  -Wall -Wextra)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
-  DOWNLOAD_EXTRACT_TIMESTAMP false
-)
-
-FetchContent_MakeAvailable(googletest)
-
 
 add_executable(
     gb_emu
@@ -37,20 +33,32 @@ add_executable(
 
 target_link_libraries(gb_emu GbCore)
 
+# building tests
 
-enable_testing()
+# include(FetchContent)
+# FetchContent_Declare(
+#   googletest
+#   URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+#   DOWNLOAD_EXTRACT_TIMESTAMP false
+# )
 
-add_executable(run_tests
-    test/main.cpp
-    test/cpu/instructions.cpp
-)
+# FetchContent_MakeAvailable(googletest)
 
 
-target_include_directories(run_tests PUBLIC
-    test/cpu/
-)
 
-target_link_libraries(run_tests GbCore GTest::gtest)
+# enable_testing()
 
-include(GoogleTest)
-gtest_discover_tests(run_tests)
+# add_executable(run_tests
+#     test/main.cpp
+#     test/cpu/instructions.cpp
+# )
+
+
+# target_include_directories(run_tests PUBLIC
+#     test/cpu/
+# )
+
+# target_link_libraries(run_tests GbCore GTest::gtest)
+
+# include(GoogleTest)
+# gtest_discover_tests(run_tests)

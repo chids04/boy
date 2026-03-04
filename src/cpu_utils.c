@@ -1,5 +1,5 @@
+#include "boy.h"
 #include "cpu.h"
-#include "gb_mem.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -16,6 +16,14 @@ void clear_flag(CPU *cpu, Flags flag) {
 
 bool is_flag_set(CPU *cpu, Flags flag) {
     return (cpu->F & (uint8_t)flag) != 0;
+}
+
+inline uint8_t get_lsb(uint16_t val) {
+    return val & 0xFF;
+}
+
+inline uint8_t get_msb(uint16_t val) {
+    return (val >> 8) & 0xFF;
 }
 
 bool condition(CPU *cpu, uint8_t idx){
@@ -51,45 +59,46 @@ bool condition(CPU *cpu, uint8_t idx){
 
     return false;
 
-
 }
 
-uint8_t read_imm8(CPU *cpu){
-    uint16_t data = read_byte(cpu->PC);
-    cpu->PC += 1;
+uint8_t read_imm8(BOY *boy){
+    uint8_t byte = read_byte(&boy->mmu, boy->cpu.PC++);
 
-    return data;
+    return byte;
 }
 
-uint16_t read_imm16(CPU *cpu){
-    uint16_t data = read_word(cpu->PC);
-    cpu->PC += 2;
+uint16_t read_imm16(BOY *boy){
+    uint8_t lsb = read_byte(&boy->mmu, boy->cpu.PC++);
+    uint8_t msb = read_byte(&boy->mmu, boy->cpu.PC++);
 
-    return data;
+    return (msb << 8) | lsb;
 }
 
 int8_t displacement(CPU *cpu) {
     return (int8_t)read_imm8(cpu);
 }
 
-uint8_t read_r8(CPU *cpu, Reg8 reg) {
+// if HL is accessed, then we read the byte at MEMORY[HL]:
+uint8_t read_r8(BOY *boy, Reg8 reg) {
     switch (reg) {
         case REG_B:
-            return cpu->B;
+            return boy->cpu.B;
         case REG_C:
-            return cpu->C;
+            return boy->cpu.C;
         case REG_D:
-            return cpu->D;
+            return boy->cpu.D;
         case REG_E:
-            return cpu->E;
+            return boy->cpu.E;
         case REG_H:
-            return cpu->H;
+            return boy->cpu.H;
         case REG_L:
-            return cpu->L;
-        case REG_HL_8:
-            return read_byte((cpu->H << 8) | cpu->L);
+            return boy->cpu.L;
+        case REG_HL_8: {
+            uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
+            return read_byte(&boy->mmu, hl);
+        }
         case REG_A:
-            return cpu->A;
+            return boy->cpu.A;
     }
 
     printf("read_r8: invalid 8 bit register, returning 0\n");
@@ -153,40 +162,40 @@ void write_r16(CPU *cpu, uint16_t data, Reg16 reg, bool has_af){
     }
 }
 
-void write_r8(CPU *cpu, uint8_t data, Reg8 reg){
+// if HL is accessed, then we read the byte at MEMORY[HL]:
+void write_r8(BOY *boy, uint8_t data, Reg8 reg){
     switch (reg) {
         case REG_B:
-            cpu->B = data;
+            boy->cpu.B = data;
             break;
         case REG_C:
-            cpu->C = data;
+            boy->cpu.C = data;
             break;
 
         case REG_D:
-            cpu->D = data;
+            boy->cpu.D = data;
             break;
 
         case REG_E:
-            cpu->E = data;
+            boy->cpu.E = data;
             break;
 
         case REG_H:
-            cpu->H = data;
+            boy->cpu.H = data;
             break;
 
         case REG_L:
-            cpu->L = data;
+            boy->cpu.L = data;
             break;
 
         case REG_HL_8:
             {
-                uint16_t addr = read_r16(cpu, REG_HL_16, false);
-                write_byte(addr, data);
-
+                uint16_t address = read_r16(&boy->cpu, REG_HL_16, false);
+                write_byte(&boy->mmu, address, data);
             }
             break;
         case REG_A:
-            cpu->A = data;
+            boy->cpu.A = data;
     }
 }
 

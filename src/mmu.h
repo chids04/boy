@@ -1,8 +1,6 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "common.h"
 
 #define ROM_BANK0_START 0x0000
 #define ROM_BANK0_END   0x3FFF
@@ -36,7 +34,7 @@
 
 #define IE_REG        0xFFFF
 
-typedef enum {
+enum MBC_TYPE {
   MBC_NONE = 0x0,
   MBC_1,
   MBC_1_RAM,
@@ -45,10 +43,10 @@ typedef enum {
   MBC_2_BATTERY_RAM,
   MBC_NONE_RAM = 0x08,
   MBC_NONE_BATTERY_RAM,
-} MBC_TYPE;
+} ;
 
 struct mbc {
-  MBC_TYPE mbc_type;
+  enum MBC_TYPE mbc_type;
 
   union {
     struct {
@@ -60,16 +58,16 @@ struct mbc {
   };
 };
 
-typedef enum {
+enum RAM_SIZE {
   RAM_NONE,
   RAM_2KB,
   RAM_8KB,
   RAM_32KB,
   RAM_128KB,
   RAM_64KB,
-} RAM_SIZE;
+} ;
 
-typedef enum {
+enum ROM_SIZE {
   ROM_32KB,
   ROM_64KB,
   ROM_128KB,
@@ -82,39 +80,62 @@ typedef enum {
   ROM_1_1MB = 0x52,
   ROM_1_2MB,
   ROM_1_5MB,
-} ROM_SIZE;
+} ;
 
-struct mmu {
+struct MMU {
   uint8_t memory[0x10000]; // 0xFFFF is 65535, so 0x10000 bytes for a full 64KB
                            // address space
   uint8_t *rom;
   uint8_t *ram;
   struct mbc mbc;
-  RAM_SIZE ram_size;
-  ROM_SIZE rom_size;
+  enum RAM_SIZE ram_size;
+  enum ROM_SIZE rom_size;
+
+  // interrupt registers
+  uint8_t IF;
+  uint8_t IE;
+
+  // joypad
+  uint8_t JOYP;
+
+  // serial transfer data
+  uint8_t SB;
+
+  // serial transfer control
+  uint8_t SC;
+
+  // timer registers
+  uint16_t DIV;
+  uint8_t TIMA;
+  uint8_t TMA;
+  uint8_t TAC;
+
 
   // io registers
-};
+} ;
 
-struct mmu *init_mmu(uint8_t *rom);
-struct mbc get_mbc(struct mmu *mmu);
+MMU *init_mmu(uint8_t *rom);
+void init_hardware_registers(MMU *mmu);
+uint8_t rom_header_checksum(MMU* mmu);
+struct mbc get_mbc(MMU *mmu);
 
-void handle_cart_write(struct mmu *mmu, uint16_t address, uint8_t data);
-void handle_mbc1_write(struct mmu *mmu, uint16_t address, uint8_t data);
 
-uint8_t handle_cart_read(struct mmu *mmu, uint16_t address);
-uint8_t handle_mbc1_read(struct mmu *mmu, uint16_t address);
+void handle_cart_write(MMU *mmu, uint16_t address, uint8_t data);
+void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data);
 
-int get_zero_bank_num(struct mmu *mmu);
-int get_high_bank_num(struct mmu *mmu);
+uint8_t handle_cart_read(MMU *mmu, uint16_t address);
+uint8_t handle_mbc1_read(MMU *mmu, uint16_t address);
 
-uint8_t read_byte(struct mmu *mmu, uint16_t address);
-void write_byte(struct mmu *mmu, uint16_t address, uint8_t data);
+int get_zero_bank_num(MMU *mmu);
+int get_high_bank_num(MMU *mmu);
 
-void handle_io_read(struct mmu* mmu, uint16_t address);
+uint8_t read_byte(MMU *mmu, uint16_t address);
+void write_byte(MMU *mmu, uint16_t address, uint8_t data);
 
-int ram_size_bytes(RAM_SIZE size);
+void handle_io_read(MMU *mmu, uint16_t address);
+
+int ram_size_bytes(enum RAM_SIZE size);
 
 // depending on the rom size, a certain number of the upper bits are ignored
 // when selecting the bank number
-uint8_t rom_mask(ROM_SIZE size);
+uint8_t rom_mask(enum ROM_SIZE size);

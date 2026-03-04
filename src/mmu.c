@@ -1,8 +1,10 @@
 #include "mmu.h"
 #include <stdlib.h>
+#include <stdio.h>
+#include "log.h"
 
-struct mmu* init_mmu(uint8_t *rom){
-    struct mmu* mmu = malloc(sizeof(struct mmu));
+MMU* init_mmu(uint8_t *rom){
+    MMU* mmu = malloc(sizeof(MMU));
     mmu->rom = rom;
 
     mmu->mbc.mbc_type = mmu->rom[0x0147];
@@ -13,49 +15,75 @@ struct mmu* init_mmu(uint8_t *rom){
     mmu->rom = rom;
     mmu->ram = malloc(ram_size_bytes(mmu->ram_size));
 
+    init_hardware_registers(mmu);
+
     return mmu;
 }
 
-uint8_t read_byte(struct mmu *mmu, uint16_t address) {
+void init_hardware_registers(MMU *mmu){
+    mmu->JOYP = 0xCF;
+    mmu->SB = 0x00;
+    mmu->SC = 0x7E;
+
+    mmu->DIV = 0xAB;
+    mmu->TIMA = 0x00;
+    mmu->TMA = 0x00;
+    mmu->TAC = 0xF8;
+
+    mmu->IF = 0xE1;
+    mmu->IE = 0x00;
+}
+
+uint8_t rom_header_checksum(MMU *mmu){
+    uint8_t checksum = 0;
+    for (uint16_t address = 0x0134; address <= 0x014C; address++) {
+        checksum = checksum - mmu->rom[address] - 1;
+    }
+
+    return checksum;
+}
+
+uint8_t read_byte(MMU *mmu, uint16_t address) {
+    log_set_level(1);
+
     if(address >= ROM_BANK0_START && address <= ROM_BANK1_END){
         // handle cartridge read
         // may need to tick timers inside the mbc to handle the timing differences
         return handle_cart_read(mmu, address);
     }
     else if(address >= VRAM_START && address <= VRAM_END){
-        fprintf(stderr, "VRAM handler for address 0x%04X not implemented", address);
+        log_warn("VRAM handler for address 0x%04X not implemented\n", address);
         // handle vram reads here
         // not implemented yet
-
     }
     else if(address >= SRAM_START && address <= SRAM_END){
         // handle external ram read here
-        fprintf(stderr, "SRAM handler for address 0x%04X not implemented", address);
+        log_warn("SRAM handler for address 0x%04X not implemented", address);
     }
     else if(address >= 0xE000 && address <= 0xFDFF){
         // handle echo ram
         // technically use of this area is prohibted so no need to emulate
-        fprintf(stderr, "ECHO RAM handler for address 0x%04X not implemented", address);
+        log_warn( "ECHO RAM handler for address 0x%04X not implemented", address);
     }
     else if(address >= 0xFE00 && address <= 0xFE9F){
         // handle oam
-        fprintf(stderr, "OAM handler for address 0x%04X not implemented", address);
+        log_warn( "OAM handler for address 0x%04X not implemented", address);
     }
     else if(address >= 0xFEA0 && address <= 0xFEFF){
         // use of this area prohibited
-        fprintf(stderr, "prohibited area handler for address 0x%04X not implemented", address);
+        log_warn( "prohibited area handler for address 0x%04X not implemented", address);
     }
     else if(address >= 0xFF00 && address <=0xFF7F){
         // handle IO registers
-        fprintf(stderr, "IO handler for address 0x%04X not implemented", address);
+        log_warn( "IO handler for address 0x%04X not implemented", address);
     }
-    else if(address >= 0xFF80 && address <= 0xFFE){
+    else if(address >= 0xFF80 && address <= 0xFFFE){
         // handle HRAM
-        fprintf(stderr, "HRAM handler for address 0x%04X not implemented", address);
+        log_warn( "HRAM handler for address 0x%04X not implemented", address);
     }
 }
 
-uint8_t handle_cart_read(struct mmu *mmu, uint16_t address){
+uint8_t handle_cart_read(MMU *mmu, uint16_t address){
     switch (mmu->mbc.mbc_type){
         case MBC_NONE:
             break;
@@ -69,12 +97,12 @@ uint8_t handle_cart_read(struct mmu *mmu, uint16_t address){
             //return handle_mbc1_read(mmu, address);
 
         default:
-            fprintf(stderr, "read_byte: mbc unimplemented");
+            log_warn("read_byte: mbc unimplemented");
     }
 }
 
 
-void write_byte(struct mmu *mmu, uint16_t address, uint8_t data){
+void write_byte(MMU *mmu, uint16_t address, uint8_t data){
     if(address >= ROM_BANK0_START && address <= ROM_BANK1_END){
         // handle cartridge write
         // may need to tick timers inside the mbc to handle the timing differences
@@ -102,13 +130,13 @@ void write_byte(struct mmu *mmu, uint16_t address, uint8_t data){
     else if(address >= 0xFF00 && address <=0xFF7F){
         // handle IO registers
     }
-    else if(address >= 0xFF80 && address <= 0xFFE){
+    else if(address >= 0xFF80 && address <= 0xFFFE){
         // handle HRAM
     }
 
 }
 
-void handle_cart_write(struct mmu *mmu, uint16_t address, uint8_t data){
+void handle_cart_write(MMU *mmu, uint16_t address, uint8_t data){
     switch (mmu->mbc.mbc_type){
         case MBC_NONE:
             break;
@@ -128,7 +156,7 @@ void handle_cart_write(struct mmu *mmu, uint16_t address, uint8_t data){
     }
 }
 
-void handle_mbc1_write(struct mmu *mmu, uint16_t address, uint8_t data){
+void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data){
     if (address >= 0x0 && address <= 0x1FFF
     ){
         if((data & 0xF) == 0xA) {
@@ -202,7 +230,7 @@ void handle_mbc1_write(struct mmu *mmu, uint16_t address, uint8_t data){
 }
 
 
-uint8_t handle_mbc1_read(struct mmu *mmu, uint16_t address){
+uint8_t handle_mbc1_read(MMU *mmu, uint16_t address){
 
     // writing to rom bank 0
     if(address >= ROM_BANK0_START && address <= ROM_BANK0_END) {
@@ -253,7 +281,7 @@ uint8_t handle_mbc1_read(struct mmu *mmu, uint16_t address){
     }
 }
 
-int get_zero_bank_num(struct mmu *mmu) {
+int get_zero_bank_num(MMU *mmu) {
     switch (mmu->rom_size){
         case ROM_32KB:
         case ROM_64KB:
@@ -272,7 +300,7 @@ int get_zero_bank_num(struct mmu *mmu) {
     }
 }
 
-int get_high_bank_num(struct mmu *mmu){
+int get_high_bank_num(MMU *mmu){
     switch (mmu->rom_size){
         case ROM_32KB:
         case ROM_64KB:
@@ -298,7 +326,7 @@ int get_high_bank_num(struct mmu *mmu){
     }
 }
 
-int ram_size_bytes(RAM_SIZE size){
+int ram_size_bytes(enum RAM_SIZE size){
     switch (size) {
         case RAM_NONE:
             return 0;
@@ -315,7 +343,7 @@ int ram_size_bytes(RAM_SIZE size){
     }
 }
 
-uint8_t rom_mask(ROM_SIZE size){
+uint8_t rom_mask(enum ROM_SIZE size){
     switch (size){
         case ROM_32KB:
             return 0b00000001;

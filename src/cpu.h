@@ -2,20 +2,17 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "common.h"
 
 /*
     decoded according to the schema at:
-
     https://archive.gbdev.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
  *
  */
 
-typedef struct {
+
+
+struct CPU {
     uint8_t A; // registers
     uint8_t F;
     // 7: Z
@@ -41,7 +38,8 @@ typedef struct {
 
     bool interrupt_delay;
     bool enable_interrupts ;
-} CPU;
+
+} ;
 
 // extract bit patterns in opcode
 static inline uint8_t get_y(uint8_t opcode) {
@@ -74,7 +72,7 @@ typedef enum {
 
 void set_flag(CPU *cpu, Flags flag);
 void clear_flag(CPU *cpu, Flags flag);
-bool is_flag_set(CPU*cpu, Flags flag);
+bool is_flag_set(CPU *cpu, Flags flag);
 
 typedef enum {
     REG_B,
@@ -95,143 +93,144 @@ typedef enum {
     REG_AF = REG_SP,
 } Reg16;
 
+void init_cpu(CPU *cpu, uint8_t header_checksum);
 
 // instruction handlers //
 
 // x == 0
 
 // z= 0
-void nop(CPU *cpu);
-void ld_nn_sp(CPU *cpu);
-void stop(CPU *cpu);
-void jr_d(CPU *cpu);
-void jr_cc_d(CPU *cpu);
+void nop(BOY *boy);
+void ld_nn_sp(BOY *boy);
+void stop(BOY *boy);
+void jr_d(BOY *boy);
+void jr_cc_d(BOY *boy);
 
 
 // z= 1
-void ld_r16_imm16(CPU *cpu);
-void add_hl_r16(CPU *cpu);
+void ld_r16_imm16(BOY *boy);
+void add_hl_r16(BOY *boy);
 
 // z= 2
-void ld_bc_a(CPU *cpu);
-void ld_hli_a(CPU *cpu);
-void ld_de_a(CPU *cpu);
-void ld_hld_a(CPU *cpu);
-void ld_a_bc(CPU* cpu);
-void ld_a_hli(CPU *cpu);
-void ld_a_de(CPU *cpu);
-void ld_a_hld(CPU *cpu);
+void ld_bc_a(BOY *boy);
+void ld_hli_a(BOY *boy);
+void ld_de_a(BOY *boy);
+void ld_hld_a(BOY *boy);
+void ld_a_bc(BOY *boy);
+void ld_a_hli(BOY *boy);
+void ld_a_de(BOY *boy);
+void ld_a_hld(BOY *boy);
 
 // z= 3
-void inc_r16(CPU *cpu);
-void dec_r16(CPU *cpu);
+void inc_r16(BOY *boy);
+void dec_r16(BOY *boy);
 
 // z= 4
-void inc_r8(CPU *cpu);
+void inc_r8(BOY *boy);
 
 // z= 5
-void dec_r8(CPU *cpu);
+void dec_r8(BOY *boy);
 
 // z= 6
-void ld_r8_imm8(CPU *cpu);
+void ld_r8_imm8(BOY *boy);
 
 // z= 7
-void rlca(CPU* cpu);
-void rrca(CPU* cpu);
-void rla(CPU* cpu);
-void rra(CPU* cpu);
-void daa(CPU* cpu);
-void cpl(CPU* cpu);
-void scf(CPU* cpu);
-void ccf(CPU* cpu);
+void rlca(BOY *boy);
+void rrca(BOY *boy);
+void rla(BOY *boy);
+void rra(BOY *boy);
+void daa(BOY *boy);
+void cpl(BOY *boy);
+void scf(BOY *boy);
+void ccf(BOY *boy);
 
 // x = 1
-void ld_r8_r8(CPU *cpu);
-void halt(CPU *cpu);
+void ld_r8_r8(BOY *boy);
+void halt(BOY *boy);
 
 // x = 2
 
 // alu ops
-void alu_a_r8(CPU *cpu);
-void add_a_r8(CPU *cpu);
-void adc_a_r8(CPU *cpu);
-void sub_a_r8(CPU *cpu);
-void subc_a_r8(CPU *cpu);
-void and_a_r8(CPU *cpu);
-void xor_a_r8(CPU *cpu);
-void or_a_r8(CPU *cpu);
-void cp_a_r8(CPU *cpu);
+void alu_a_r8(BOY *boy);
+void add_a_r8(BOY *boy);
+void adc_a_r8(BOY *boy);
+void sub_a_r8(BOY *boy);
+void subc_a_r8(BOY *boy);
+void and_a_r8(BOY *boy);
+void xor_a_r8(BOY *boy);
+void or_a_r8(BOY *boy);
+void cp_a_r8(BOY *boy);
 
 
 // x = 3
 
 // z = 0
-void ret_cc(CPU *cpu);
-void ld_0xFF00_n_A(CPU *cpu);
-void ld_A_0xFF00_n(CPU *cpu);
+void ret_cc(BOY *boy);
+void ld_0xFF00_n_A(BOY *boy);
+void ld_A_0xFF00_n(BOY *boy);
 
 
-void add_sp_d(CPU *cpu);
-void ld_hl_sp_d(CPU *cpu);
+void add_sp_d(BOY *boy);
+void ld_hl_sp_d(BOY *boy);
 
 // z = 1
-void pop_r16(CPU *cpu);
-void ret(CPU *cpu);
-void reti(CPU *cpu);
-void jp_hl(CPU *cpu);
-void ld_sp_hl(CPU *cpu);
+void pop_r16(BOY *boy);
+void ret(BOY *boy);
+void reti(BOY *boy);
+void jp_hl(BOY *boy);
+void ld_sp_hl(BOY *boy);
 
 // z=2
-void jp_cc_nn(CPU *cpu);
-void ld_0xFF00_C_A(CPU *cpu);
-void ld_A_0xFF00_C(CPU *cpu);
-void ld_nn_a(CPU *cpu);
-void ld_a_nn(CPU *cpu);
+void jp_cc_nn(BOY *boy);
+void ld_0xFF00_C_A(BOY *boy);
+void ld_A_0xFF00_C(BOY *boy);
+void ld_nn_a(BOY *boy);
+void ld_a_nn(BOY *boy);
 
 // z = 3
-void jp_nn(CPU *cpu);
-void ei(CPU *cpu);
-void di(CPU *cpu);
+void jp_nn(BOY *boy);
+void ei(BOY *boy);
+void di(BOY *boy);
 
 // z = 4
-void call_cc_nn(CPU *cpu);
+void call_cc_nn(BOY *boy);
 
 // z = 5
-void call_nn(CPU *cpu);
-void push_r16(CPU *cpu);
+void call_nn(BOY *boy);
+void push_r16(BOY *boy);
 
 // z = 6
 // alu ops on 8 bit immediate value
-void alu_a_n(CPU *cpu);
-void add_a_n(CPU *cpu);
-void adc_a_n(CPU *cpu);
-void sub_a_n(CPU *cpu);
-void subc_a_n(CPU *cpu);
-void and_a_n(CPU *cpu);
-void xor_a_n(CPU *cpu);
-void or_a_n(CPU *cpu);
-void cp_a_n(CPU *cpu);
+void alu_a_n(BOY *boy);
+void add_a_n(BOY *boy);
+void adc_a_n(BOY *boy);
+void sub_a_n(BOY *boy);
+void subc_a_n(BOY *boy);
+void and_a_n(BOY *boy);
+void xor_a_n(BOY *boy);
+void or_a_n(BOY *boy);
+void cp_a_n(BOY *boy);
 
 // z = 7
-void rst(CPU *cpu);
+void rst(BOY *boy);
 
 // CB Prefix
 
 // x = 0
-void rot(CPU *cpu);
-void rlc_r8(CPU *cpu);
-void rrc_r8(CPU *cpu);
-void rl_r8(CPU *cpu);
-void rr_r8(CPU *cpu);
-void sla_r8(CPU *cpu);
-void sra_r8(CPU *cpu);
-void swap_r8(CPU *cpu);
-void srl_r8(CPU *cpu);
+void rot(BOY *boy);
+void rlc_r8(BOY *boy);
+void rrc_r8(BOY *boy);
+void rl_r8(BOY *boy);
+void rr_r8(BOY *boy);
+void sla_r8(BOY *boy);
+void sra_r8(BOY *boy);
+void swap_r8(BOY *boy);
+void srl_r8(BOY *boy);
 
 // x = 1
-void bit_y_r8(CPU *cpu);
-void res_y_r8(CPU *cpu);
-void set_y_r8(CPU *cpu);
+void bit_y_r8(BOY *boy);
+void res_y_r8(BOY *boy);
+void set_y_r8(BOY *boy);
 
 
 // utils for common cpu operations //
@@ -240,26 +239,22 @@ void set_y_r8(CPU *cpu);
 bool condition(CPU *cpu, uint8_t idx);
 
 // reads immediate value and increments pc
-uint8_t read_imm8(CPU *cpu);
-uint16_t read_imm16(CPU *cpu);
+uint8_t read_imm8(BOY *boy);
+uint16_t read_imm16(BOY *boy);
 
-// calculates the signed displacement from current PC
-int8_t displacement(CPU *cpu);
-
-// reads bytes immediately after instruction and increments PC
 uint16_t read_r16(CPU *cpu, Reg16 reg, bool has_af);
-uint8_t read_r8(CPU *cpu, Reg8 reg);
+uint8_t read_r8(BOY *boy, Reg8 reg);
 
 // writes bytes to registers
 void write_r16(CPU *cpu, uint16_t data, Reg16 reg, bool has_af);
-void write_r8(CPU *cpu, uint8_t data, Reg8 reg);
+void write_r8(BOY *boy, uint8_t data, Reg8 reg);
 
 
 // calculating half carries for inc / dec instructions
 void inc8_half_carry(const uint8_t value, CPU *cpu);
 void dec8_half_carry(const uint8_t value, CPU *cpu);
 void inc16_half_carry(const uint8_t value, CPU *cpu);
-void dec16_half_carry(const uint8_t value, CPU *cpu);
+void dec16_half_carry(const uint8_t value, CPU *boy);
 
 void half_carry8(CPU *cpu, uint8_t a, uint8_t b);
 void carry8(CPU *cpu, uint8_t a, uint8_t b);
@@ -272,8 +267,4 @@ void sub8_half_carry(const uint8_t value, CPU *cpu);
 void sub8_carry(const uint8_t value, CPU *cpu);
 
 
-void decode_instruction(CPU *cpu);
-
-#ifdef __cplusplus
-}
-#endif
+void decode_instruction(BOY *boy);
