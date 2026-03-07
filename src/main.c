@@ -1,48 +1,50 @@
+#include "boy.h"
+#include "common.h"
+#include "log.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "common.h"
-#include "boy.h"
 
-int main(){
-    // read the rom, start cpu and start decoding
-    FILE *f = fopen("../cpu_instrs/cpu_instrs.gb", "rb");
+int main() {
+  // read the rom, start cpu and start decoding
+  log_set_quiet(true);
 
-    if (f == NULL) {
-        perror("error opening rom for reading");
-        return 1;
-    }
+  FILE *f = fopen("./cpu_instrs/individual/04-op r,imm.gb", "r");
 
-    fseek(f, 0, SEEK_END);
-    long f_size = ftell(f);
-    rewind(f);
+  if (f == NULL) {
+    perror("error opening rom for reading");
+    return 1;
+  }
 
-    uint8_t *rom = malloc(f_size);
-    if (rom == NULL) {
-        fprintf(stderr, "mem alloc failed\n");
-        fclose(f);
-        return 1;
-    }
+  fseek(f, 0, SEEK_END);
+  long f_size = ftell(f);
+  rewind(f);
 
-    size_t bytes_read = fread(rom, 1, f_size, f);
-    if (bytes_read != f_size) {
-        fprintf(stderr, "Error reading f\n");
-        free(rom);
-        fclose(f);
-        return 1;
-    }
-
+  uint8_t *rom = malloc(f_size);
+  if (rom == NULL) {
+    fprintf(stderr, "mem alloc failed\n");
     fclose(f);
-    printf("Successfully loaded %ld bytes.\n", f_size);
+    return 1;
+  }
 
-
-    // skip the bootrom for now
-    BOY boy;
-    load_rom(&boy, rom);
-    init_components(&boy);
-    run(&boy);
-
+  size_t bytes_read = fread(rom, 1, f_size, f);
+  if (bytes_read != f_size) {
+    fprintf(stderr, "Error reading f\n");
     free(rom);
+    fclose(f);
+    return 1;
+  }
 
-    return 0;
+  fclose(f);
+  printf("Successfully loaded %ld bytes.\n", f_size);
+
+  // skip the bootrom for now
+  BOY boy;
+  load_rom(&boy, rom);
+  init_components(&boy);
+  run(&boy);
+
+  free(rom);
+
+  return 0;
 }
