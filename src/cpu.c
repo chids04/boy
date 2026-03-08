@@ -25,7 +25,7 @@ void init_cpu(CPU *cpu, uint8_t header_checksum) {
   cpu->E = 0xD8;
   cpu->H = 0x01;
   cpu->L = 0x4D;
-  cpu->PC = 0x100;
+  cpu->PC = 0x0100;
   cpu->SP = 0xFFFE;
 }
 

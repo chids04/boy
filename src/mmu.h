@@ -35,6 +35,7 @@
 #define IE_REG 0xFFFF
 
 #define WRAM_SIZE 0x2000
+#define VRAM_SIZE 0x2000
 #define HRAM_SIZE 0x7F
 
 enum MBC_TYPE {
@@ -91,6 +92,7 @@ struct MMU {
   uint8_t *rom;
   uint8_t *sram;
   uint8_t wram[WRAM_SIZE];
+  uint8_t vram[VRAM_SIZE];
   uint8_t hram[HRAM_SIZE];
 
   struct mbc mbc;
@@ -125,19 +127,22 @@ uint8_t rom_header_checksum(MMU *mmu);
 struct mbc get_mbc(MMU *mmu);
 
 void handle_cart_write(MMU *mmu, uint16_t address, uint8_t data);
-void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data);
-
 uint8_t handle_cart_read(MMU *mmu, uint16_t address);
+
 uint8_t handle_mbc1_read(MMU *mmu, uint16_t address);
+void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data);
 
 int get_zero_bank_num(MMU *mmu);
 int get_high_bank_num(MMU *mmu);
 
-uint8_t read_byte(MMU *mmu, uint16_t address);
-void write_byte(MMU *mmu, uint16_t address, uint8_t data);
+uint8_t read_byte(BOY *boy, uint16_t address);
+void write_byte(BOY *boy, uint16_t address, uint8_t data);
 
 void write_sram(MMU *mmu, uint16_t address, uint8_t data);
 uint8_t read_sram(MMU *mmu, uint16_t address);
+
+uint8_t handle_lcd_read(BOY *boy, uint16_t address);
+uint8_t handle_timers_read(BOY *boy, uint16_t address);
 
 void handle_io_read(MMU *mmu, uint16_t address);
 
