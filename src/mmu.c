@@ -1,6 +1,7 @@
 #include "mmu.h"
 #include "boy.h"
 #include "log.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -47,7 +48,7 @@ uint8_t rom_header_checksum(MMU *mmu) {
 uint8_t read_byte(BOY *boy, uint16_t address) {
   log_set_level(1);
 
-  uint8_t data = 0;
+  uint8_t data = 0xFF;
 
   if (address >= ROM_BANK0_START && address <= ROM_BANK1_END) {
     // handle cartridge read
@@ -77,35 +78,12 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
              address);
   } else if (address >= 0xFF00 && address <= 0xFF7F) {
     // handle IO registers
-    if (address == 0xFF00) {
-      data = boy->mmu.JOYP;
-    } else if (address == 0xFF01) {
-      data = boy->mmu.SB;
-    } else if (address == 0xFF02) {
-      data = boy->mmu.SC;
-    } else if (address >= 0xFF04 && address <= 0xFF07) {
-      // timer and div
-      data = handle_timers_read(boy, address);
-    } else if (address == 0xFF0F) {
-      data = boy->mmu.IF;
-    } else if (address >= 0xFF10 && address <= 0xFF26) {
-      // handle audio here
-      log_warn("audio handler for address 0x%04X not implemented", address);
-    } else if (address >= 0xFF30 && address <= 0xFF3F) {
-      // handle wave pattern ram
-      log_warn("wave pattern ram handler for address 0x%04X not implemented",
-               address);
-    } else if (address >= 0xFF40 && address <= 0xFF4B) {
-      // handle lcd control, status, position, scrolling and paletters
-      data = handle_lcd_read(boy, address);
-    } else if (address == 0xFF46) {
-      // handle OAM DMA transfer here
-      log_warn("OAM DMA transfer handler for address 0x%04X not implemented",
-               address);
-    }
+    data = handle_io_read(boy, address);
+
   } else if (address >= 0xFF80 && address <= 0xFFFE) {
     // handle HRAM
-    log_warn("HRAM handler for address 0x%04X not implemented", address);
+    data = boy->mmu.hram[address - HRAM_START];
+
   } else if (address == 0xFFFF) {
     // interrupt enable
     boy->mmu.IE = data;
@@ -114,7 +92,7 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
   // all reads take 1 cycle so tick timer here
   tick(boy, 1);
 
-  return 0;
+  return data;
 }
 
 void write_byte(BOY *boy, uint16_t address, uint8_t data) {
@@ -143,6 +121,7 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
   } else if (address >= ECHO_RAM_START && address <= ECHO_RAM_END) {
     // use of this area prohibited
   } else if (address >= IO_START && address <= IO_END) {
+    // handle IO registers
 
     if (address == 0xFF01) {
       boy->mmu.SB = data;
@@ -153,10 +132,12 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
       fflush(stdout);
     }
 
-    // handle IO registers
-  } else if (address >= 0xFF80 && address <= 0xFFFE) {
+  } else if (address >= HRAM_START && address <= HRAM_END) {
+    boy->mmu.hram[address - HRAM_START] = data;
 
     // handle HRAM
+  } else if (address == 0xFFFF) {
+    boy->mmu.IE = data;
   }
 }
 
@@ -277,6 +258,89 @@ uint8_t handle_timers_read(BOY *boy, uint16_t address) {
   case 0xFF07:
     return boy->mmu.TAC;
   }
+
+  return 0xFF;
+}
+
+void handle_timers_write(BOY *boy, uint16_t address, uint8_t data) {
+  switch (address) {
+  case 0xFF04:
+    // writing to div registers resets it
+    boy->mmu.DIV = 0;
+    break;
+  case 0xFF05:
+    // TIMA is read only
+    break;
+  case 0xFF06:
+    boy->mmu.TMA = data;
+  case 0xFF07:
+    boy->mmu.TAC = data;
+  }
+}
+
+uint8_t handle_io_read(BOY *boy, uint16_t address) {
+  uint8_t data = 0xFF;
+
+  if (address == 0xFF00) {
+    data = boy->mmu.JOYP;
+  } else if (address == 0xFF01) {
+    data = boy->mmu.SB;
+  } else if (address == 0xFF02) {
+    data = boy->mmu.SC;
+  } else if (address >= 0xFF04 && address <= 0xFF07) {
+    // timer and div
+    data = handle_timers_read(boy, address);
+  } else if (address == 0xFF0F) {
+    data = boy->mmu.IF;
+  } else if (address >= 0xFF10 && address <= 0xFF26) {
+    // handle audio here
+    log_error("audio handler for address 0x%04X not implemented", address);
+  } else if (address >= 0xFF30 && address <= 0xFF3F) {
+    // handle wave pattern ram
+    log_error("wave pattern ram handler for address 0x%04X not implemented",
+              address);
+  } else if (address >= 0xFF40 && address <= 0xFF4B) {
+    // handle lcd control, status, position, scrolling and paletters
+    data = handle_lcd_read(boy, address);
+  } else if (address == 0xFF46) {
+    // handle OAM DMA transfer here
+    log_error("OAM DMA transfer handler for address 0x%04X not implemented",
+              address);
+  }
+
+  return data;
+}
+
+void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
+
+  if (address == 0xFF00) {
+    boy->mmu.JOYP = data;
+  } else if (address == 0xFF01) {
+    boy->mmu.SB = data;
+  } else if (address == 0xFF02) {
+    boy->mmu.SC = data;
+  } else if (address >= 0xFF04 && address <= 0xFF07) {
+    // timer and div
+    handle_timers_write(boy, address, data);
+  } else if (address == 0xFF0F) {
+    boy->mmu.IF = data;
+  } else if (address >= 0xFF10 && address <= 0xFF26) {
+    // handle audio here
+    log_error("audio handler for address 0x%04X not implemented", address);
+  } else if (address >= 0xFF30 && address <= 0xFF3F) {
+    // handle wave pattern ram
+    log_error("wave pattern ram handler for address 0x%04X not implemented",
+              address);
+  } else if (address >= 0xFF40 && address <= 0xFF4B) {
+    // handle lcd control, status, position, scrolling and paletters
+
+    log_error("LCD control handler for address 0x%04X not implemented",
+              address);
+  } else if (address == 0xFF46) {
+    // handle OAM DMA transfer here
+    log_error("OAM DMA transfer handler for address 0x%04X not implemented",
+              address);
+  }
 }
 
 uint8_t handle_mbc1_read(MMU *mmu, uint16_t address) {
@@ -300,9 +364,7 @@ uint8_t handle_mbc1_read(MMU *mmu, uint16_t address) {
     return mmu->rom[rom_offset];
   }
 
-  // reading from external ram
-  else if (address >= SRAM_START && address <= SRAM_END) {
-  }
+  return 0xFF;
 }
 
 void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data) {
