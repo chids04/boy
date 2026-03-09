@@ -54,19 +54,17 @@ bool condition(CPU *cpu, uint8_t idx) {
 }
 
 uint8_t read_imm8(BOY *boy) {
-  uint8_t byte = read_byte(&boy->mmu, boy->cpu.PC++);
+  uint8_t byte = read_byte(boy, boy->cpu.PC++);
 
   return byte;
 }
 
 uint16_t read_imm16(BOY *boy) {
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.PC++);
-  uint8_t msb = read_byte(&boy->mmu, boy->cpu.PC++);
+  uint8_t lsb = read_byte(boy, boy->cpu.PC++);
+  uint8_t msb = read_byte(boy, boy->cpu.PC++);
 
   return (msb << 8) | lsb;
 }
-
-int8_t displacement(CPU *cpu) { return (int8_t)read_imm8(cpu); }
 
 // if HL is accessed, then we read the byte at MEMORY[HL]:
 uint8_t read_r8(BOY *boy, Reg8 reg) {
@@ -85,7 +83,7 @@ uint8_t read_r8(BOY *boy, Reg8 reg) {
     return boy->cpu.L;
   case REG_HL_8: {
     uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-    return read_byte(&boy->mmu, hl);
+    return read_byte(boy, hl);
   }
   case REG_A:
     return boy->cpu.A;
@@ -178,7 +176,7 @@ void write_r8(BOY *boy, uint8_t data, Reg8 reg) {
 
   case REG_HL_8: {
     uint16_t address = read_r16(&boy->cpu, REG_HL_16, false);
-    write_byte(&boy->mmu, address, data);
+    write_byte(boy, address, data);
   } break;
   case REG_A:
     boy->cpu.A = data;

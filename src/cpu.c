@@ -45,14 +45,14 @@ void ld_nn_sp(BOY *boy) {
   // copy stack pointer to mem[nn], with nn being word after opcode
 
   // 2 cycles to read the 16 bit memory address
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.PC);
-  uint8_t msb = read_byte(&boy->mmu, ++boy->cpu.PC);
+  uint8_t lsb = read_byte(boy, boy->cpu.PC);
+  uint8_t msb = read_byte(boy, ++boy->cpu.PC);
 
   uint16_t addr = (msb << 8) | lsb;
 
   // 2 cycles to write the 16 bit value to memory
-  write_byte(&boy->mmu, addr, boy->cpu.SP & 0xFF);
-  write_byte(&boy->mmu, addr + 1, (boy->cpu.SP >> 8) & 0xFF);
+  write_byte(boy, addr, boy->cpu.SP & 0xFF);
+  write_byte(boy, addr + 1, (boy->cpu.SP >> 8) & 0xFF);
 
   boy->cpu.cycles = 5;
 }
@@ -61,7 +61,7 @@ void jr_d(BOY *boy) {
   log_debug("Executing %s", __func__);
   // add signed 8bit 'd' to next instruction,
 
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
 
   boy->cpu.PC += d;
 
@@ -76,7 +76,7 @@ void jr_cc_d(BOY *boy) {
   uint8_t cond = get_y(boy->cpu.opcode) - 4;
 
   printf("jr_cc_d: current condition %d\n", cond);
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
 
   if (condition(&boy->cpu, cond)) {
     boy->cpu.PC += d;
@@ -123,7 +123,7 @@ void ld_bc_a(BOY *boy) {
   // mem[bc] = A
 
   uint16_t bc = read_r16(&boy->cpu, REG_BC, false);
-  write_byte(&boy->mmu, bc, boy->cpu.A);
+  write_byte(boy, bc, boy->cpu.A);
 
   boy->cpu.cycles = 2;
 }
@@ -133,7 +133,7 @@ void ld_hli_a(BOY *boy) {
   // mem[hl] = A, HL++
 
   uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  write_byte(&boy->mmu, hl, boy->cpu.A);
+  write_byte(boy, hl, boy->cpu.A);
   write_r16(&boy->cpu, hl + 1, REG_HL_16, false);
 
   boy->cpu.cycles = 2;
@@ -154,7 +154,7 @@ void ld_hld_a(BOY *boy) {
   // mem[HL] = A, HL--
   //
   uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  write_byte(&boy->mmu, hl, boy->cpu.A);
+  write_byte(boy, hl, boy->cpu.A);
   write_r16(&boy->cpu, hl - 1, REG_HL_16, false);
 
   boy->cpu.cycles = 2;
@@ -165,7 +165,7 @@ void ld_a_bc(BOY *boy) {
   // a = memory[bc].
 
   uint16_t bc = read_r16(&boy->cpu, REG_BC, false);
-  uint8_t data = read_byte(&boy->mmu, bc);
+  uint8_t data = read_byte(boy, bc);
 
   boy->cpu.A = data;
   boy->cpu.cycles = 2;
@@ -176,7 +176,7 @@ void ld_a_hli(BOY *boy) {
   // load a from memory location specified by hl, then increment hl.
 
   uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  uint8_t data = read_byte(&boy->mmu, hl);
+  uint8_t data = read_byte(boy, hl);
 
   boy->cpu.A = data;
 
@@ -187,7 +187,7 @@ void ld_a_hld(BOY *boy) {
   log_debug("Executing %s", __func__);
 
   uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  uint8_t data = read_byte(&boy->mmu, hl);
+  uint8_t data = read_byte(boy, hl);
 
   boy->cpu.A = data;
 
@@ -199,7 +199,7 @@ void ld_a_de(BOY *boy) {
   // load a from memory location pointed to by de.
   //
   uint16_t de = read_r16(&boy->cpu, REG_DE, false);
-  uint8_t data = read_byte(&boy->mmu, de);
+  uint8_t data = read_byte(boy, de);
 
   boy->cpu.A = data;
   boy->cpu.cycles = 2;
@@ -720,8 +720,8 @@ void cp_a_r8(BOY *boy) {
 
 void ret(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.SP++);
-  uint8_t msb = read_byte(&boy->mmu, boy->cpu.SP++);
+  uint8_t lsb = read_byte(boy, boy->cpu.SP++);
+  uint8_t msb = read_byte(boy, boy->cpu.SP++);
 
   boy->cpu.PC = (msb << 8) | lsb;
   boy->cpu.cycles = 4;
@@ -743,7 +743,7 @@ void ld_0xFF00_n_A(BOY *boy) {
   uint8_t n = read_imm8(boy);
   uint16_t dest = 0xFF00 + n;
 
-  write_byte(&boy->mmu, dest, boy->cpu.A);
+  write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 3;
 }
 
@@ -751,12 +751,12 @@ void ld_A_0xFF00_n(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t n = read_imm8(boy);
   uint16_t src = 0xFF00 + n;
-  boy->cpu.A = read_byte(&boy->mmu, src);
+  boy->cpu.A = read_byte(boy, src);
 }
 
 void add_sp_d(BOY *boy) {
   log_debug("Executing %s", __func__);
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
   uint8_t sp_lower = boy->cpu.SP & 0xFF;
 
   half_carry8(&boy->cpu, sp_lower, d);
@@ -771,7 +771,7 @@ void add_sp_d(BOY *boy) {
 
 void ld_hl_sp_d(BOY *boy) {
   log_debug("Executing %s", __func__);
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
   uint8_t sp_lower = boy->cpu.SP & 0xFF;
 
   clear_flag(&boy->cpu, FLAG_Z);
@@ -786,8 +786,8 @@ void ld_hl_sp_d(BOY *boy) {
 
 void pop_r16(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.SP++);
-  uint8_t msb = read_byte(&boy->mmu, boy->cpu.SP++);
+  uint8_t lsb = read_byte(boy, boy->cpu.SP++);
+  uint8_t msb = read_byte(boy, boy->cpu.SP++);
 
   uint8_t p = get_p(boy->cpu.opcode);
   write_r16(&boy->cpu, (msb << 8) | lsb, p, true);
@@ -797,8 +797,8 @@ void pop_r16(BOY *boy) {
 
 void reti(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.SP++);
-  uint8_t msb = read_byte(&boy->mmu, boy->cpu.SP++);
+  uint8_t lsb = read_byte(boy, boy->cpu.SP++);
+  uint8_t msb = read_byte(boy, boy->cpu.SP++);
 
   boy->cpu.PC = (msb << 8) | lsb;
   boy->cpu.enable_interrupts = true;
@@ -838,28 +838,28 @@ void jp_cc_nn(BOY *boy) {
 void ld_0xFF00_C_A(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t dest = 0xFF00 + boy->cpu.C;
-  write_byte(&boy->mmu, dest, boy->cpu.A);
+  write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 2;
 }
 
 void ld_A_0xFF00_C(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t dest = 0xFF00 + boy->cpu.C;
-  boy->cpu.A = read_byte(&boy->mmu, dest);
+  boy->cpu.A = read_byte(boy, dest);
   boy->cpu.cycles = 2;
 }
 
 void ld_nn_a(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t dest = read_imm16(boy);
-  write_byte(&boy->mmu, dest, boy->cpu.A);
+  write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 4;
 }
 
 void ld_a_nn(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint16_t src = read_imm16(boy);
-  boy->cpu.A = read_byte(&boy->mmu, src);
+  boy->cpu.A = read_byte(boy, src);
   boy->cpu.cycles = 4;
 }
 
@@ -889,8 +889,8 @@ void call_cc_nn(BOY *boy) {
   uint16_t r16 = read_imm16(boy);
 
   if (condition(&boy->cpu, y)) {
-    write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC >> 8);
-    write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+    write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+    write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
     // set pc
     boy->cpu.PC = r16;
@@ -1107,11 +1107,10 @@ void call_nn(BOY *boy) {
   uint16_t dest = read_imm16(boy);
 
   // pc will be holding the address of instruction to save
-
   // push this to the stack
   // 2 m cycles
-  write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC >> 8);
-  write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
   // set pc
   boy->cpu.PC = dest;
@@ -1129,8 +1128,8 @@ void push_r16(BOY *boy) {
   uint8_t p = get_p(boy->cpu.opcode);
   uint16_t data = read_r16(&boy->cpu, p, true);
 
-  write_byte(&boy->mmu, --boy->cpu.SP, data >> 8);
-  write_byte(&boy->mmu, --boy->cpu.SP, data & 0xFF);
+  write_byte(boy, --boy->cpu.SP, data >> 8);
+  write_byte(boy, --boy->cpu.SP, data & 0xFF);
 
   boy->cpu.cycles = 4;
 }
@@ -1138,15 +1137,13 @@ void push_r16(BOY *boy) {
 void rst(BOY *boy) {
   log_debug("Executing %s", __func__);
 
-  // no op cus of rst bug in tetris lol
+  uint16_t addr = get_y(boy->cpu.opcode) * 8;
 
-  // uint16_t addr = get_y(boy->cpu.opcode) * 8;
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
-  // cpu->SP -= 2;
-  // write_word(cpu->SP, addr);
-  // cpu->PC = addr;
-
-  // boy->cpu.cycles = 4;
+  boy->cpu.PC = addr;
+  tick(boy, 1);
 }
 
 void rot(BOY *boy) {
@@ -1523,7 +1520,8 @@ void decode_instruction(BOY *boy) {
     boy->cpu.ime = true;
   }
 
-  boy->cpu.opcode = read_byte(&boy->mmu, boy->cpu.PC++);
+  boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
+  tick(boy, 1);
 
   // specific bitfields in the opcode which aid in decoding
   uint8_t y = get_y(boy->cpu.opcode);
@@ -1535,7 +1533,7 @@ void decode_instruction(BOY *boy) {
   // check for prefix byte first
   switch (boy->cpu.opcode) {
   case 0xCB:
-    boy->cpu.opcode = read_byte(&boy->mmu, boy->cpu.PC++);
+    boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
     uint8_t x = get_x(boy->cpu.opcode);
 
     switch (x) {
@@ -1557,7 +1555,7 @@ void decode_instruction(BOY *boy) {
   case 0xDD:
   case 0xED:
   case 0xFD:
-    boy->cpu.opcode = read_byte(&boy->mmu, boy->cpu.PC++);
+    boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
     return;
   }
 
