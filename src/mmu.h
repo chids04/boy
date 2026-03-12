@@ -119,7 +119,8 @@ struct MMU {
   uint8_t TAC;
 };
 
-MMU *init_mmu(uint8_t *rom);
+MMU* init_mmu(uint8_t *rom);
+void init_mbc(MMU *mmu);
 void init_hardware_registers(MMU *mmu);
 uint8_t rom_header_checksum(MMU *mmu);
 struct mbc get_mbc(MMU *mmu);
