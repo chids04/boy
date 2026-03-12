@@ -10,6 +10,7 @@ MMU *init_mmu(uint8_t *rom) {
   mmu->rom = rom;
 
   mmu->mbc.mbc_type = mmu->rom[0x0147];
+  init_mbc(mmu);
 
   mmu->ram_size = mmu->rom[0x0149];
   mmu->rom_size = mmu->rom[0x0148];
@@ -20,6 +21,21 @@ MMU *init_mmu(uint8_t *rom) {
   init_hardware_registers(mmu);
 
   return mmu;
+}
+
+void init_mbc(MMU *mmu) {
+    switch (mmu->mbc.mbc_type) {
+        case MBC_1:
+        case MBC_1_RAM:
+        case MBC_1_BATTERY_RAM:
+            mmu->mbc.mbc_1.ram_enable = false;
+            mmu->mbc.mbc_1.mode = 0;
+            mmu->mbc.mbc_1.rom_bank_num = 1;
+            mmu->mbc.mbc_1.ram_bank_num = 0;
+
+        default:
+            return;
+    }
 }
 
 void init_hardware_registers(MMU *mmu) {
@@ -86,7 +102,7 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
 
   } else if (address == 0xFFFF) {
     // interrupt enable
-    boy->mmu.IE = data;
+    data = boy->mmu.IE;
   }
 
   // all reads take 1 cycle so tick timer here
@@ -144,11 +160,9 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
 uint8_t handle_cart_read(MMU *mmu, uint16_t address) {
   switch (mmu->mbc.mbc_type) {
   case MBC_NONE:
-    break;
   case MBC_NONE_RAM:
-    break;
   case MBC_NONE_BATTERY_RAM:
-    break;
+    return mmu->rom[address];
   case MBC_1:
   case MBC_1_RAM:
   case MBC_1_BATTERY_RAM:
@@ -427,26 +441,34 @@ int get_zero_bank_num(MMU *mmu) {
 }
 
 int get_high_bank_num(MMU *mmu) {
+  // et the 5-bit register value
+  uint8_t bank = mmu->mbc.mbc_1.rom_bank_num & 0x1F;
+
+  // apply the MBC1 translation rule: 0 becomes 1
+  if (bank == 0) bank = 1;
+
+  //  mask it based on the actual ROM size (to prevent out-of-bounds)
+  bank &= rom_mask(mmu->rom_size);
+
   switch (mmu->rom_size) {
   case ROM_32KB:
   case ROM_64KB:
   case ROM_128KB:
   case ROM_256KB:
   case ROM_512KB:
-    return mmu->mbc.mbc_1.rom_bank_num & rom_mask(mmu->rom_size);
+    return bank;
+
   case ROM_1MB: {
-    uint8_t bank = mmu->mbc.mbc_1.rom_bank_num & rom_mask(mmu->rom_size);
-    uint8_t ram_bit_mask = (mmu->mbc.mbc_1.ram_bank_num & 1) << 5;
-    return bank | ram_bit_mask;
+    uint8_t high_bit = (mmu->mbc.mbc_1.ram_bank_num & 0x01) << 5;
+    return bank | high_bit;
   }
 
   case ROM_2MB: {
-    uint8_t bank = mmu->mbc.mbc_1.rom_bank_num & rom_mask(mmu->rom_size);
-    uint8_t ram_bit_mask = (mmu->mbc.mbc_1.ram_bank_num & 0x03) << 5;
-    return bank | ram_bit_mask;
+    uint8_t high_bits = (mmu->mbc.mbc_1.ram_bank_num & 0x03) << 5;
+    return bank | high_bits;
   }
   default:
-    fprintf(stderr, "mbc1: no high bank number for selected ROM size");
+    log_error("mbc1: no high bank number for selected ROM size");
     exit(1);
   }
 }

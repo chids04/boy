@@ -7,7 +7,6 @@
 
 int main() {
   // read the rom, start cpu and start decoding
-
   FILE *f = fopen("./cpu_instrs/individual/03-op sp,hl.gb", "r");
 
   if (f == NULL) {
