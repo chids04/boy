@@ -1,6 +1,7 @@
 #include "mmu.h"
 #include "boy.h"
 #include "log.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,6 +10,7 @@ MMU *init_mmu(uint8_t *rom) {
   mmu->rom = rom;
 
   mmu->mbc.mbc_type = mmu->rom[0x0147];
+  init_mbc(mmu);
 
   mmu->ram_size = mmu->rom[0x0149];
   mmu->rom_size = mmu->rom[0x0148];
@@ -19,6 +21,21 @@ MMU *init_mmu(uint8_t *rom) {
   init_hardware_registers(mmu);
 
   return mmu;
+}
+
+void init_mbc(MMU *mmu) {
+    switch (mmu->mbc.mbc_type) {
+        case MBC_1:
+        case MBC_1_RAM:
+        case MBC_1_BATTERY_RAM:
+            mmu->mbc.mbc_1.ram_enable = false;
+            mmu->mbc.mbc_1.mode = 0;
+            mmu->mbc.mbc_1.rom_bank_num = 1;
+            mmu->mbc.mbc_1.ram_bank_num = 0;
+
+        default:
+            return;
+    }
 }
 
 void init_hardware_registers(MMU *mmu) {
@@ -47,7 +64,7 @@ uint8_t rom_header_checksum(MMU *mmu) {
 uint8_t read_byte(BOY *boy, uint16_t address) {
   log_set_level(1);
 
-  uint8_t data = 0;
+  uint8_t data = 0xFF;
 
   if (address >= ROM_BANK0_START && address <= ROM_BANK1_END) {
     // handle cartridge read
@@ -77,44 +94,21 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
              address);
   } else if (address >= 0xFF00 && address <= 0xFF7F) {
     // handle IO registers
-    if (address == 0xFF00) {
-      data = boy->mmu.JOYP;
-    } else if (address == 0xFF01) {
-      data = boy->mmu.SB;
-    } else if (address == 0xFF02) {
-      data = boy->mmu.SC;
-    } else if (address >= 0xFF04 && address <= 0xFF07) {
-      // timer and div
-      data = handle_timers_read(boy, address);
-    } else if (address == 0xFF0F) {
-      data = boy->mmu.IF;
-    } else if (address >= 0xFF10 && address <= 0xFF26) {
-      // handle audio here
-      log_warn("audio handler for address 0x%04X not implemented", address);
-    } else if (address >= 0xFF30 && address <= 0xFF3F) {
-      // handle wave pattern ram
-      log_warn("wave pattern ram handler for address 0x%04X not implemented",
-               address);
-    } else if (address >= 0xFF40 && address <= 0xFF4B) {
-      // handle lcd control, status, position, scrolling and paletters
-      data = handle_lcd_read(boy, address);
-    } else if (address == 0xFF46) {
-      // handle OAM DMA transfer here
-      log_warn("OAM DMA transfer handler for address 0x%04X not implemented",
-               address);
-    }
+    data = handle_io_read(boy, address);
+
   } else if (address >= 0xFF80 && address <= 0xFFFE) {
     // handle HRAM
-    log_warn("HRAM handler for address 0x%04X not implemented", address);
+    data = boy->mmu.hram[address - HRAM_START];
+
   } else if (address == 0xFFFF) {
     // interrupt enable
-    boy->mmu.IE = data;
+    data = boy->mmu.IE;
   }
 
   // all reads take 1 cycle so tick timer here
   tick(boy, 1);
 
-  return 0;
+  return data;
 }
 
 void write_byte(BOY *boy, uint16_t address, uint8_t data) {
@@ -143,6 +137,7 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
   } else if (address >= ECHO_RAM_START && address <= ECHO_RAM_END) {
     // use of this area prohibited
   } else if (address >= IO_START && address <= IO_END) {
+    // handle IO registers
 
     if (address == 0xFF01) {
       boy->mmu.SB = data;
@@ -153,21 +148,21 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
       fflush(stdout);
     }
 
-    // handle IO registers
-  } else if (address >= 0xFF80 && address <= 0xFFFE) {
+  } else if (address >= HRAM_START && address <= HRAM_END) {
+    boy->mmu.hram[address - HRAM_START] = data;
 
     // handle HRAM
+  } else if (address == 0xFFFF) {
+    boy->mmu.IE = data;
   }
 }
 
 uint8_t handle_cart_read(MMU *mmu, uint16_t address) {
   switch (mmu->mbc.mbc_type) {
   case MBC_NONE:
-    break;
   case MBC_NONE_RAM:
-    break;
   case MBC_NONE_BATTERY_RAM:
-    break;
+    return mmu->rom[address];
   case MBC_1:
   case MBC_1_RAM:
   case MBC_1_BATTERY_RAM:
@@ -277,6 +272,89 @@ uint8_t handle_timers_read(BOY *boy, uint16_t address) {
   case 0xFF07:
     return boy->mmu.TAC;
   }
+
+  return 0xFF;
+}
+
+void handle_timers_write(BOY *boy, uint16_t address, uint8_t data) {
+  switch (address) {
+  case 0xFF04:
+    // writing to div registers resets it
+    boy->mmu.DIV = 0;
+    break;
+  case 0xFF05:
+    // TIMA is read only
+    break;
+  case 0xFF06:
+    boy->mmu.TMA = data;
+  case 0xFF07:
+    boy->mmu.TAC = data;
+  }
+}
+
+uint8_t handle_io_read(BOY *boy, uint16_t address) {
+  uint8_t data = 0xFF;
+
+  if (address == 0xFF00) {
+    data = boy->mmu.JOYP;
+  } else if (address == 0xFF01) {
+    data = boy->mmu.SB;
+  } else if (address == 0xFF02) {
+    data = boy->mmu.SC;
+  } else if (address >= 0xFF04 && address <= 0xFF07) {
+    // timer and div
+    data = handle_timers_read(boy, address);
+  } else if (address == 0xFF0F) {
+    data = boy->mmu.IF;
+  } else if (address >= 0xFF10 && address <= 0xFF26) {
+    // handle audio here
+    log_error("audio handler for address 0x%04X not implemented", address);
+  } else if (address >= 0xFF30 && address <= 0xFF3F) {
+    // handle wave pattern ram
+    log_error("wave pattern ram handler for address 0x%04X not implemented",
+              address);
+  } else if (address >= 0xFF40 && address <= 0xFF4B) {
+    // handle lcd control, status, position, scrolling and paletters
+    data = handle_lcd_read(boy, address);
+  } else if (address == 0xFF46) {
+    // handle OAM DMA transfer here
+    log_error("OAM DMA transfer handler for address 0x%04X not implemented",
+              address);
+  }
+
+  return data;
+}
+
+void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
+
+  if (address == 0xFF00) {
+    boy->mmu.JOYP = data;
+  } else if (address == 0xFF01) {
+    boy->mmu.SB = data;
+  } else if (address == 0xFF02) {
+    boy->mmu.SC = data;
+  } else if (address >= 0xFF04 && address <= 0xFF07) {
+    // timer and div
+    handle_timers_write(boy, address, data);
+  } else if (address == 0xFF0F) {
+    boy->mmu.IF = data;
+  } else if (address >= 0xFF10 && address <= 0xFF26) {
+    // handle audio here
+    log_error("audio handler for address 0x%04X not implemented", address);
+  } else if (address >= 0xFF30 && address <= 0xFF3F) {
+    // handle wave pattern ram
+    log_error("wave pattern ram handler for address 0x%04X not implemented",
+              address);
+  } else if (address >= 0xFF40 && address <= 0xFF4B) {
+    // handle lcd control, status, position, scrolling and paletters
+
+    log_error("LCD control handler for address 0x%04X not implemented",
+              address);
+  } else if (address == 0xFF46) {
+    // handle OAM DMA transfer here
+    log_error("OAM DMA transfer handler for address 0x%04X not implemented",
+              address);
+  }
 }
 
 uint8_t handle_mbc1_read(MMU *mmu, uint16_t address) {
@@ -300,9 +378,7 @@ uint8_t handle_mbc1_read(MMU *mmu, uint16_t address) {
     return mmu->rom[rom_offset];
   }
 
-  // reading from external ram
-  else if (address >= SRAM_START && address <= SRAM_END) {
-  }
+  return 0xFF;
 }
 
 void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data) {
@@ -365,26 +441,34 @@ int get_zero_bank_num(MMU *mmu) {
 }
 
 int get_high_bank_num(MMU *mmu) {
+  // et the 5-bit register value
+  uint8_t bank = mmu->mbc.mbc_1.rom_bank_num & 0x1F;
+
+  // apply the MBC1 translation rule: 0 becomes 1
+  if (bank == 0) bank = 1;
+
+  //  mask it based on the actual ROM size (to prevent out-of-bounds)
+  bank &= rom_mask(mmu->rom_size);
+
   switch (mmu->rom_size) {
   case ROM_32KB:
   case ROM_64KB:
   case ROM_128KB:
   case ROM_256KB:
   case ROM_512KB:
-    return mmu->mbc.mbc_1.rom_bank_num & rom_mask(mmu->rom_size);
+    return bank;
+
   case ROM_1MB: {
-    uint8_t bank = mmu->mbc.mbc_1.rom_bank_num & rom_mask(mmu->rom_size);
-    uint8_t ram_bit_mask = (mmu->mbc.mbc_1.ram_bank_num & 1) << 5;
-    return bank | ram_bit_mask;
+    uint8_t high_bit = (mmu->mbc.mbc_1.ram_bank_num & 0x01) << 5;
+    return bank | high_bit;
   }
 
   case ROM_2MB: {
-    uint8_t bank = mmu->mbc.mbc_1.rom_bank_num & rom_mask(mmu->rom_size);
-    uint8_t ram_bit_mask = (mmu->mbc.mbc_1.ram_bank_num & 0x03) << 5;
-    return bank | ram_bit_mask;
+    uint8_t high_bits = (mmu->mbc.mbc_1.ram_bank_num & 0x03) << 5;
+    return bank | high_bits;
   }
   default:
-    fprintf(stderr, "mbc1: no high bank number for selected ROM size");
+    log_error("mbc1: no high bank number for selected ROM size");
     exit(1);
   }
 }
