@@ -15,6 +15,6 @@ this is a learning exercise for me to learn the inner workings of a computer
 * link cable emulation (much harder than i thought since link cable is much much faster than any network connection possible)
 * implemented more mbcs
 
-in the .zed folder there are tasks to run, debug and test the emulator, they work in the zed ide be can easily but typed into command line if u use something else
+in the .zed folder there are tasks to run, debug and test the emulator, they work in the zed ide but can easily be typed into command line if u use something else
 
 prs are welcome, please dont use ai since it can easily one shot this and it would be nice to be able to use this for learning
