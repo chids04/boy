@@ -12,6 +12,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
+                "CMAKE_C_FLAGS": "-DLOG_USE_COLOR",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "YES"
             }
         },

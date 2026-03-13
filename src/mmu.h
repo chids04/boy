@@ -117,20 +117,16 @@ struct MMU {
   uint8_t TIMA;
   uint8_t TMA;
   uint8_t TAC;
-
-  // io registers
 };
 
-MMU *init_mmu(uint8_t *rom);
+MMU* init_mmu(uint8_t *rom);
+void init_mbc(MMU *mmu);
 void init_hardware_registers(MMU *mmu);
 uint8_t rom_header_checksum(MMU *mmu);
 struct mbc get_mbc(MMU *mmu);
 
 void handle_cart_write(MMU *mmu, uint16_t address, uint8_t data);
 uint8_t handle_cart_read(MMU *mmu, uint16_t address);
-
-uint8_t handle_mbc1_read(MMU *mmu, uint16_t address);
-void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data);
 
 int get_zero_bank_num(MMU *mmu);
 int get_high_bank_num(MMU *mmu);
@@ -143,8 +139,13 @@ uint8_t read_sram(MMU *mmu, uint16_t address);
 
 uint8_t handle_lcd_read(BOY *boy, uint16_t address);
 uint8_t handle_timers_read(BOY *boy, uint16_t address);
+void handle_timers_write(BOY *boy, uint16_t address, uint8_t data);
 
-void handle_io_read(MMU *mmu, uint16_t address);
+uint8_t handle_io_read(BOY *boy, uint16_t address);
+void handle_io_write(BOY *boy, uint16_t address, uint8_t data);
+
+uint8_t handle_mbc1_read(MMU *mmu, uint16_t address);
+void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data);
 
 int ram_size_bytes(enum RAM_SIZE size);
 

@@ -3,6 +3,7 @@
 #include "log.h"
 #include "mmu.h"
 
+#include "utils.h"
 #include <iso646.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -27,6 +28,52 @@ void init_cpu(CPU *cpu, uint8_t header_checksum) {
   cpu->L = 0x4D;
   cpu->PC = 0x0100;
   cpu->SP = 0xFFFE;
+  cpu->enable_interrupts = false;
+  cpu->interrupt_delay = false;
+  cpu->is_halted = false;
+}
+
+void handle_cb_prefix(BOY *boy) {
+  boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
+
+  switch (get_bit_range(boy->cpu.opcode, 7, 3)) {
+  case 0b00000:
+    rlc_r8(boy);
+    return;
+  case 0b00001:
+    rrc_r8(boy);
+    return;
+  case 0b00010:
+    rl_r8(boy);
+    return;
+  case 0b00011:
+    rr_r8(boy);
+    return;
+  case 0b00100:
+    sla_r8(boy);
+    return;
+  case 0b00101:
+    sra_r8(boy);
+    return;
+  case 0b00110:
+    swap_r8(boy);
+    return;
+  case 0b00111:
+    srl_r8(boy);
+    return;
+  }
+
+  switch (get_bit_range(boy->cpu.opcode, 7, 6)) {
+  case 0b01:
+    bit_r8(boy);
+    return;
+  case 0b10:
+    res_r8(boy);
+    return;
+  case 0b11:
+    set_r8(boy);
+    return;
+  }
 }
 
 void nop(BOY *boy) {
@@ -40,28 +87,55 @@ void stop(BOY *boy) {
   log_warn("STOP instruction not implemented\n");
 }
 
-void ld_nn_sp(BOY *boy) {
+void ld_imm16_sp(BOY *boy) {
   log_debug("Executing %s", __func__);
-  // copy stack pointer to mem[nn], with nn being word after opcode
+  // load stack pointer to mem[nn], with nn being word after opcode
 
-  // 2 cycles to read the 16 bit memory address
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.PC);
-  uint8_t msb = read_byte(&boy->mmu, ++boy->cpu.PC);
-
-  uint16_t addr = (msb << 8) | lsb;
+  uint16_t imm16 = read_imm16(boy);
 
   // 2 cycles to write the 16 bit value to memory
-  write_byte(&boy->mmu, addr, boy->cpu.SP & 0xFF);
-  write_byte(&boy->mmu, addr + 1, (boy->cpu.SP >> 8) & 0xFF);
+  write_byte(boy, imm16, boy->cpu.SP & 0xFF);
+  write_byte(boy, imm16 + 1, (boy->cpu.SP >> 8) & 0xFF);
 
   boy->cpu.cycles = 5;
+}
+
+void ld_imm16_a(BOY *boy) {
+  log_debug("Executing %s", __func__);
+  // load register A to mem[nn], with nn being word after opcode
+  uint16_t imm16 = read_imm16(boy);
+  write_byte(boy, imm16, boy->cpu.A);
+  boy->cpu.cycles = 4;
+}
+
+void ld_a_imm16(BOY *boy) {
+  log_debug("Executing %s", __func__);
+  // load mem[nn] into register A, with nn being word after opcode
+  uint16_t imm16 = read_imm16(boy);
+  boy->cpu.A = read_byte(boy, imm16);
+}
+
+void ld_r16mem_a(BOY *boy) {
+  log_debug("Executing %s", __func__);
+  // store A in mem[r16mem]
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
+  write_r16mem(boy, reg, boy->cpu.A);
+}
+
+void ld_a_r16mem(BOY *boy) {
+  log_debug("Executing %s", __func__);
+  // store [r16mem] into A
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
+  uint8_t data = read_r16mem(boy, reg);
+
+  boy->cpu.A = data;
 }
 
 void jr_d(BOY *boy) {
   log_debug("Executing %s", __func__);
   // add signed 8bit 'd' to next instruction,
 
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
 
   boy->cpu.PC += d;
 
@@ -72,20 +146,15 @@ void jr_d(BOY *boy) {
 
 void jr_cc_d(BOY *boy) {
   log_debug("Executing %s", __func__);
+  uint8_t cond = get_bit_range(boy->cpu.opcode, 4, 3);
 
-  uint8_t cond = get_y(boy->cpu.opcode) - 4;
-
-  printf("jr_cc_d: current condition %d\n", cond);
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
 
   if (condition(&boy->cpu, cond)) {
     boy->cpu.PC += d;
     tick(boy, 1);
     boy->cpu.cycles = 3;
-  }
-
-  else {
-    printf("jr_cc_d: condition not met\n");
+  } else {
     boy->cpu.cycles = 2;
   }
 }
@@ -94,11 +163,10 @@ void ld_r16_imm16(BOY *boy) {
   log_debug("Executing %s", __func__);
 
   uint16_t imm16 = read_imm16(boy);
-
   // p is top 2 msb of y (bits 5 - 4 of opcode)
-  uint8_t p = get_p(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
 
-  write_r16(&boy->cpu, imm16, p, false);
+  write_r16(&boy->cpu, imm16, reg);
 
   boy->cpu.cycles = 3;
 }
@@ -106,111 +174,37 @@ void ld_r16_imm16(BOY *boy) {
 void add_hl_r16(BOY *boy) {
   log_debug("Executing %s", __func__);
   // p is top 2 msb of y (bits 5 - 4 of opcode)
-  uint8_t p = get_p(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
+  uint16_t data = read_r16(&boy->cpu, reg);
 
-  uint16_t data = read_r16(&boy->cpu, p, false);
+  // calc flags
+  uint16_t hl = read_r16(&boy->cpu, 2);
 
-  uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  write_r16(&boy->cpu, data + hl, REG_HL_16, false);
+  if (data + hl > 0xFFFF) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
+  }
 
+  if ((data & 0x0FFF) + (hl & 0x0FFF) > 0xFFF) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
+  }
+
+  clear_flag(&boy->cpu, FLAG_N);
+
+  write_r16(&boy->cpu, data + hl, 2);
   tick(boy, 1);
 
   boy->cpu.cycles = 2;
 }
 
-void ld_bc_a(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // mem[bc] = A
-
-  uint16_t bc = read_r16(&boy->cpu, REG_BC, false);
-  write_byte(&boy->mmu, bc, boy->cpu.A);
-
-  boy->cpu.cycles = 2;
-}
-
-void ld_hli_a(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // mem[hl] = A, HL++
-
-  uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  write_byte(&boy->mmu, hl, boy->cpu.A);
-  write_r16(&boy->cpu, hl + 1, REG_HL_16, false);
-
-  boy->cpu.cycles = 2;
-}
-
-void ld_de_a(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // mem[de] = A
-
-  uint16_t de = read_r16(&boy->cpu, REG_DE, false);
-  write_r16(&boy->cpu, de, REG_DE, false);
-
-  boy->cpu.cycles = 2;
-}
-
-void ld_hld_a(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // mem[HL] = A, HL--
-  //
-  uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  write_byte(&boy->mmu, hl, boy->cpu.A);
-  write_r16(&boy->cpu, hl - 1, REG_HL_16, false);
-
-  boy->cpu.cycles = 2;
-}
-
-void ld_a_bc(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // a = memory[bc].
-
-  uint16_t bc = read_r16(&boy->cpu, REG_BC, false);
-  uint8_t data = read_byte(&boy->mmu, bc);
-
-  boy->cpu.A = data;
-  boy->cpu.cycles = 2;
-}
-
-void ld_a_hli(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // load a from memory location specified by hl, then increment hl.
-
-  uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  uint8_t data = read_byte(&boy->mmu, hl);
-
-  boy->cpu.A = data;
-
-  write_r16(&boy->cpu, hl + 1, REG_HL_16, false);
-}
-
-void ld_a_hld(BOY *boy) {
-  log_debug("Executing %s", __func__);
-
-  uint16_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  uint8_t data = read_byte(&boy->mmu, hl);
-
-  boy->cpu.A = data;
-
-  write_r16(&boy->cpu, hl - 1, REG_HL_16, false);
-}
-
-void ld_a_de(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // load a from memory location pointed to by de.
-  //
-  uint16_t de = read_r16(&boy->cpu, REG_DE, false);
-  uint8_t data = read_byte(&boy->mmu, de);
-
-  boy->cpu.A = data;
-  boy->cpu.cycles = 2;
-}
-
 void inc_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t y = get_y(boy->cpu.opcode);
-  uint8_t q = y >> 2;
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 3);
 
-  uint8_t data = read_r8(boy, q);
+  uint8_t data = read_r8(boy, reg);
 
   // first check for half carries
   inc8_half_carry(data, &boy->cpu);
@@ -225,22 +219,14 @@ void inc_r8(BOY *boy) {
   }
 
   clear_flag(&boy->cpu, FLAG_N);
-  write_r8(boy, data, q);
-
-  boy->cpu.cycles = 1;
-
-  // Add extra cycle for HL register memory operation
-  if (q == REG_HL_8) {
-    boy->cpu.cycles += 1;
-  }
+  write_r8(boy, data, reg);
 }
+
 void dec_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t y = get_y(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 3);
 
-  uint8_t q = y >> 2;
-
-  uint8_t data = read_r8(boy, q);
+  uint8_t data = read_r8(boy, reg);
 
   // first check for half carries
   dec8_half_carry(data, &boy->cpu);
@@ -254,22 +240,17 @@ void dec_r8(BOY *boy) {
   }
 
   set_flag(&boy->cpu, FLAG_N);
-  write_r8(boy, data, q);
+  write_r8(boy, data, reg);
 
   boy->cpu.cycles = 1;
-
-  // add extra cycle for HL register memory operation
-  if (q == REG_HL_8) {
-    boy->cpu.cycles = 3;
-  }
 }
 
 void inc_r16(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t p = get_p(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
 
-  uint16_t data = read_r16(&boy->cpu, p, false);
-  write_r16(&boy->cpu, data += 1, p, false);
+  uint16_t data = read_r16(&boy->cpu, reg);
+  write_r16(&boy->cpu, data += 1, reg);
 
   tick(boy, 1);
 
@@ -278,9 +259,9 @@ void inc_r16(BOY *boy) {
 
 void dec_r16(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t p = get_p(boy->cpu.opcode);
-  uint16_t data = read_r16(&boy->cpu, p, false);
-  write_r16(&boy->cpu, data - 1, p, false);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
+  uint16_t data = read_r16(&boy->cpu, reg);
+  write_r16(&boy->cpu, data - 1, reg);
   tick(boy, 1);
 
   boy->cpu.cycles = 2;
@@ -289,17 +270,14 @@ void dec_r16(BOY *boy) {
 void ld_r8_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
   // write the immediate next byte to 8 bit register
-  uint8_t y = get_y(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 3);
 
   uint8_t imm8 = read_imm8(boy);
-  write_r8(boy, imm8, y);
+  write_r8(boy, imm8, reg);
 
   boy->cpu.cycles = 2;
 
   // Add extra cycle for HL register memory operation
-  if (y == REG_HL_8) {
-    boy->cpu.cycles += 1;
-  }
 }
 
 void rlca(BOY *boy) {
@@ -399,29 +377,44 @@ void daa(BOY *boy) {
 
   uint8_t adjustment = 0;
 
+  // subtraction adjustment
   if (is_flag_set(&boy->cpu, FLAG_N)) {
     if (is_flag_set(&boy->cpu, FLAG_H)) {
-      adjustment += 0x6;
+      adjustment |= 0x06;
     }
 
     if (is_flag_set(&boy->cpu, FLAG_C)) {
-      adjustment += 0x60;
+      adjustment |= 0x60;
     }
 
     boy->cpu.A -= adjustment;
 
   } else {
 
-    if (is_flag_set(&boy->cpu, FLAG_H) || (boy->cpu.A & 0xF) > 0x9) {
-      adjustment += 0x6;
+    // addition adjustment
+    if (is_flag_set(&boy->cpu, FLAG_H) || (boy->cpu.A & 0xF) > 0x09) {
+      adjustment |= 0x06;
     }
 
     if (is_flag_set(&boy->cpu, FLAG_C) || boy->cpu.A > 0x99) {
-      adjustment += 0x60;
+      adjustment |= 0x60;
+
+      // ensure carry flag is set
+      // this could be unset if A is greater thatn 0x99 but less than 0xFF (too
+      // big for BCD but small enough to fit in 8 bit register)
+      set_flag(&boy->cpu, FLAG_C);
     }
 
     boy->cpu.A += adjustment;
   }
+
+  if (boy->cpu.A == 0) {
+    set_flag(&boy->cpu, FLAG_Z);
+  } else {
+    clear_flag(&boy->cpu, FLAG_Z);
+  }
+
+  clear_flag(&boy->cpu, FLAG_H);
 
   boy->cpu.cycles = 1;
 }
@@ -467,23 +460,17 @@ void ccf(BOY *boy) {
 void ld_r8_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
   // load val in right register into left
-  uint8_t y = get_y(boy->cpu.opcode);
-  uint8_t z = get_z(boy->cpu.opcode);
 
-  uint8_t right_data = read_r8(boy, z);
-  write_r8(boy, right_data, y);
+  uint8_t source = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t dest = get_bit_range(boy->cpu.opcode, 5, 3);
 
-  boy->cpu.cycles = 1;
-
-  // Add extra cycle for HL register memory operation
-  if (y == REG_HL_8 || z == REG_HL_8) {
-    boy->cpu.cycles += 1;
-  }
+  uint8_t right_data = read_r8(boy, source);
+  write_r8(boy, right_data, dest);
 }
 
 void halt(BOY *boy) {
   log_debug("Executing %s", __func__);
-  printf("halt(): instruction not implemented\n");
+  boy->cpu.is_halted = true;
 }
 
 void alu_a_r8(BOY *boy) {
@@ -518,8 +505,8 @@ void alu_a_r8(BOY *boy) {
 
 void add_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   // set flags
   add8_half_carry(data, &boy->cpu);
@@ -537,21 +524,31 @@ void add_a_r8(BOY *boy) {
   boy->cpu.cycles = 1;
 
   // Add extra cycle for HL register memory operation
-  if (z == REG_HL_8) {
-    boy->cpu.cycles += 1;
-  }
 }
 
 void adc_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
 
   // set flags
-  add8_half_carry(data + carry, &boy->cpu);
-  add8_carry(data + carry, &boy->cpu);
+
+  // check for half carry
+  if (((boy->cpu.A & 0xF) + (data & 0xF) + carry) > 0xF) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
+  }
+
+  // check for carry
+  if ((int)(boy->cpu.A + data + carry) > 0xFF) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
+  }
+
   clear_flag(&boy->cpu, FLAG_N);
 
   boy->cpu.A += data + carry;
@@ -565,17 +562,14 @@ void adc_a_r8(BOY *boy) {
   boy->cpu.cycles = 1;
 
   // Add extra cycle for HL register memory operation
-  if (z == REG_HL_8) {
-    boy->cpu.cycles += 1;
-  }
 }
 
 void sub_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
   // A = A - r8
 
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   set_flag(&boy->cpu, FLAG_N);
   sub8_half_carry(data, &boy->cpu);
@@ -591,26 +585,32 @@ void sub_a_r8(BOY *boy) {
   }
 
   boy->cpu.cycles = 1;
-
-  if (z == REG_HL_8)
-    boy->cpu.cycles += 1;
 }
 
 void subc_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
   // A = A - r8 - carry
 
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
-  data += carry;
+
+  if (((int)(boy->cpu.A & 0xF) - (int)(data & 0xF) - (int)carry) < 0) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
+  }
+
+  if (((int)(boy->cpu.A) - (int)data - (int)carry) < 0) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
+  }
 
   set_flag(&boy->cpu, FLAG_N);
-  sub8_half_carry(data, &boy->cpu);
-  sub8_carry(data, &boy->cpu);
 
-  boy->cpu.A -= data;
+  boy->cpu.A -= data + carry;
 
   if (boy->cpu.A == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -618,17 +618,14 @@ void subc_a_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_Z);
   }
 
-  boy->cpu.cycles = 1;
 
-  if (z == REG_HL_8)
-    boy->cpu.cycles += 1;
 }
 
 void and_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
 
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   boy->cpu.A &= data;
 
@@ -641,17 +638,12 @@ void and_a_r8(BOY *boy) {
   } else {
     clear_flag(&boy->cpu, FLAG_Z);
   }
-
-  boy->cpu.cycles = 1;
-
-  if (z == REG_HL_8)
-    boy->cpu.cycles += 1;
 }
 
 void xor_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   boy->cpu.A ^= data;
   clear_flag(&boy->cpu, FLAG_N);
@@ -665,16 +657,13 @@ void xor_a_r8(BOY *boy) {
   }
 
   boy->cpu.cycles = 1;
-
-  if (z == REG_HL_8)
-    boy->cpu.cycles += 1;
 }
 
 void or_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
 
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   boy->cpu.A |= data;
 
@@ -689,16 +678,13 @@ void or_a_r8(BOY *boy) {
   }
 
   boy->cpu.cycles = 1;
-
-  if (z == REG_HL_8)
-    boy->cpu.cycles += 1;
 }
 
 void cp_a_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
 
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   set_flag(&boy->cpu, FLAG_N);
   sub8_half_carry(data, &boy->cpu);
@@ -713,15 +699,12 @@ void cp_a_r8(BOY *boy) {
   }
 
   boy->cpu.cycles = 1;
-
-  if (z == REG_HL_8)
-    boy->cpu.cycles += 1;
 }
 
 void ret(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.SP++);
-  uint8_t msb = read_byte(&boy->mmu, boy->cpu.SP++);
+  uint8_t lsb = read_byte(boy, boy->cpu.SP++);
+  uint8_t msb = read_byte(boy, boy->cpu.SP++);
 
   boy->cpu.PC = (msb << 8) | lsb;
   boy->cpu.cycles = 4;
@@ -729,34 +712,34 @@ void ret(BOY *boy) {
 
 void ret_cc(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t y = get_y(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 4, 3);
 
-  if (condition(&boy->cpu, y)) {
+  if (condition(&boy->cpu, reg)) {
     ret(boy);
   } else {
     boy->cpu.cycles = 2;
   }
 }
 
-void ld_0xFF00_n_A(BOY *boy) {
+void ldh_imm8_a(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t n = read_imm8(boy);
-  uint16_t dest = 0xFF00 + n;
+  uint16_t dest = 0xFF00 | n;
 
-  write_byte(&boy->mmu, dest, boy->cpu.A);
+  write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 3;
 }
 
-void ld_A_0xFF00_n(BOY *boy) {
+void ldh_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t n = read_imm8(boy);
-  uint16_t src = 0xFF00 + n;
-  boy->cpu.A = read_byte(&boy->mmu, src);
+  uint16_t src = 0xFF00 | n;
+  boy->cpu.A = read_byte(boy, src);
 }
 
-void add_sp_d(BOY *boy) {
+void add_sp_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
   uint8_t sp_lower = boy->cpu.SP & 0xFF;
 
   half_carry8(&boy->cpu, sp_lower, d);
@@ -769,36 +752,51 @@ void add_sp_d(BOY *boy) {
   boy->cpu.cycles = 4;
 }
 
-void ld_hl_sp_d(BOY *boy) {
+void ld_hl_sp_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  int8_t d = (int8_t)read_byte(&boy->mmu, boy->cpu.PC++);
-  uint8_t sp_lower = boy->cpu.SP & 0xFF;
+  int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
 
   clear_flag(&boy->cpu, FLAG_Z);
   clear_flag(&boy->cpu, FLAG_N);
-  half_carry8(&boy->cpu, sp_lower, d);
-  carry8(&boy->cpu, sp_lower, d);
 
-  write_r16(&boy->cpu, boy->cpu.SP + d, REG_HL_16, false);
+  half_carry8(&boy->cpu, boy->cpu.SP, d);
+  carry8(&boy->cpu, boy->cpu.SP, d);
+
+  write_r16(&boy->cpu, boy->cpu.SP + d, 2);
 
   boy->cpu.cycles = 3;
 }
 
-void pop_r16(BOY *boy) {
+void pop_r16stk(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.SP++);
-  uint8_t msb = read_byte(&boy->mmu, boy->cpu.SP++);
+  uint8_t lsb = read_byte(boy, boy->cpu.SP++);
+  uint8_t msb = read_byte(boy, boy->cpu.SP++);
 
-  uint8_t p = get_p(boy->cpu.opcode);
-  write_r16(&boy->cpu, (msb << 8) | lsb, p, true);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
+  write_r16stk(&boy->cpu, reg, (msb << 8) | lsb);
 
   boy->cpu.cycles = 3;
+}
+
+void push_r16stk(BOY *boy) {
+  log_debug("Executing %s", __func__);
+  // pushes value from r16 reg onto the stack
+  // decr sp read
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
+  uint16_t data = read_r16stk(&boy->cpu, reg);
+
+  write_byte(boy, --boy->cpu.SP, data >> 8);
+  write_byte(boy, --boy->cpu.SP, data & 0xFF);
+
+  tick(boy, 1);
+
+  boy->cpu.cycles = 4;
 }
 
 void reti(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t lsb = read_byte(&boy->mmu, boy->cpu.SP++);
-  uint8_t msb = read_byte(&boy->mmu, boy->cpu.SP++);
+  uint8_t lsb = read_byte(boy, boy->cpu.SP++);
+  uint8_t msb = read_byte(boy, boy->cpu.SP++);
 
   boy->cpu.PC = (msb << 8) | lsb;
   boy->cpu.enable_interrupts = true;
@@ -810,23 +808,23 @@ void reti(BOY *boy) {
 
 void jp_hl(BOY *boy) {
   log_debug("Executing %s", __func__);
-  boy->cpu.PC = read_r16(&boy->cpu, REG_HL_16, false);
+  boy->cpu.PC = read_r16(&boy->cpu, 2);
   boy->cpu.cycles = 1;
 }
 
 void ld_sp_hl(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t hl = read_r16(&boy->cpu, REG_HL_16, false);
-  write_r16(&boy->cpu, hl, REG_SP, false);
+  uint16_t hl = read_r16(&boy->cpu, 2);
+  write_r16(&boy->cpu, hl, 3);
 }
 
-void jp_cc_nn(BOY *boy) {
+void jp_cc_imm16(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t y = get_y(boy->cpu.opcode);
+  uint8_t cond = get_bit_range(boy->cpu.opcode, 4, 3);
 
   uint16_t dest = read_imm16(boy);
 
-  if (condition(&boy->cpu, y)) {
+  if (condition(&boy->cpu, cond)) {
     boy->cpu.PC = dest;
     tick(boy, 1);
     boy->cpu.cycles = 4;
@@ -835,35 +833,35 @@ void jp_cc_nn(BOY *boy) {
   }
 }
 
-void ld_0xFF00_C_A(BOY *boy) {
+void ldh_c_a(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t dest = 0xFF00 + boy->cpu.C;
-  write_byte(&boy->mmu, dest, boy->cpu.A);
+  write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 2;
 }
 
-void ld_A_0xFF00_C(BOY *boy) {
+void ldh_a_c(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t dest = 0xFF00 + boy->cpu.C;
-  boy->cpu.A = read_byte(&boy->mmu, dest);
+  uint8_t src = 0xFF00 + boy->cpu.C;
+  boy->cpu.A = read_byte(boy, src);
   boy->cpu.cycles = 2;
 }
 
 void ld_nn_a(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t dest = read_imm16(boy);
-  write_byte(&boy->mmu, dest, boy->cpu.A);
+  write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 4;
 }
 
 void ld_a_nn(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint16_t src = read_imm16(boy);
-  boy->cpu.A = read_byte(&boy->mmu, src);
+  boy->cpu.A = read_byte(boy, src);
   boy->cpu.cycles = 4;
 }
 
-void jp_nn(BOY *boy) {
+void jp_imm16(BOY *boy) {
   log_debug("Executing %s", __func__);
   boy->cpu.PC = read_imm16(boy);
   tick(boy, 1);
@@ -882,15 +880,15 @@ void di(BOY *boy) {
   boy->cpu.ime = false;
 }
 
-void call_cc_nn(BOY *boy) {
+void call_cond_imm16(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t y = get_y(boy->cpu.opcode);
+  uint8_t cond = get_bit_range(boy->cpu.opcode, 4, 3);
 
   uint16_t r16 = read_imm16(boy);
 
-  if (condition(&boy->cpu, y)) {
-    write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC >> 8);
-    write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+  if (condition(&boy->cpu, cond)) {
+    write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+    write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
     // set pc
     boy->cpu.PC = r16;
@@ -903,39 +901,8 @@ void call_cc_nn(BOY *boy) {
   }
 }
 
-void alu_a_n(BOY *boy) {
+void add_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  switch (get_y(boy->cpu.opcode)) {
-  case 0:
-    add_a_n(boy);
-    return;
-  case 1:
-    adc_a_n(boy);
-    return;
-  case 2:
-    sub_a_n(boy);
-    return;
-  case 3:
-    subc_a_n(boy);
-    return;
-  case 4:
-    and_a_n(boy);
-    return;
-  case 5:
-    xor_a_n(boy);
-    return;
-  case 6:
-    or_a_n(boy);
-    return;
-  case 7:
-    cp_a_n(boy);
-    return;
-  }
-}
-
-void add_a_n(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   // set flags
@@ -950,13 +917,10 @@ void add_a_n(BOY *boy) {
   } else {
     clear_flag(&boy->cpu, FLAG_Z);
   }
-
-  boy->cpu.cycles = 2;
 }
 
-void adc_a_n(BOY *boy) {
+void adc_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
@@ -977,9 +941,8 @@ void adc_a_n(BOY *boy) {
   boy->cpu.cycles = 2;
 }
 
-void sub_a_n(BOY *boy) {
+void sub_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   set_flag(&boy->cpu, FLAG_N);
@@ -997,9 +960,8 @@ void sub_a_n(BOY *boy) {
   boy->cpu.cycles = 2;
 }
 
-void subc_a_n(BOY *boy) {
+void subc_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
@@ -1020,9 +982,8 @@ void subc_a_n(BOY *boy) {
   boy->cpu.cycles = 2;
 }
 
-void and_a_n(BOY *boy) {
+void and_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   boy->cpu.A &= data;
@@ -1040,10 +1001,9 @@ void and_a_n(BOY *boy) {
   boy->cpu.cycles = 1;
 }
 
-void xor_a_n(BOY *boy) {
+void xor_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
 
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   boy->cpu.A ^= data;
@@ -1060,9 +1020,8 @@ void xor_a_n(BOY *boy) {
   boy->cpu.cycles = 2;
 }
 
-void or_a_n(BOY *boy) {
+void or_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   boy->cpu.A |= data;
@@ -1080,9 +1039,8 @@ void or_a_n(BOY *boy) {
   boy->cpu.cycles = 2;
 }
 
-void cp_a_n(BOY *boy) {
+void cp_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
   uint8_t data = read_imm8(boy);
 
   set_flag(&boy->cpu, FLAG_N);
@@ -1100,18 +1058,17 @@ void cp_a_n(BOY *boy) {
   boy->cpu.cycles = 2;
 }
 
-void call_nn(BOY *boy) {
+void call_imm16(BOY *boy) {
   log_debug("Executing %s", __func__);
   // get the address to jump too
   // 2 m cycles
   uint16_t dest = read_imm16(boy);
 
   // pc will be holding the address of instruction to save
-
   // push this to the stack
   // 2 m cycles
-  write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC >> 8);
-  write_byte(&boy->mmu, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
   // set pc
   boy->cpu.PC = dest;
@@ -1122,31 +1079,16 @@ void call_nn(BOY *boy) {
   boy->cpu.cycles = 6;
 }
 
-void push_r16(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  // pushes value from r16 reg onto the stack
-  // decr sp read
-  uint8_t p = get_p(boy->cpu.opcode);
-  uint16_t data = read_r16(&boy->cpu, p, true);
-
-  write_byte(&boy->mmu, --boy->cpu.SP, data >> 8);
-  write_byte(&boy->mmu, --boy->cpu.SP, data & 0xFF);
-
-  boy->cpu.cycles = 4;
-}
-
 void rst(BOY *boy) {
   log_debug("Executing %s", __func__);
 
-  // no op cus of rst bug in tetris lol
+  uint16_t addr = get_bit_range(boy->cpu.opcode, 4, 3) * 8;
 
-  // uint16_t addr = get_y(boy->cpu.opcode) * 8;
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
-  // cpu->SP -= 2;
-  // write_word(cpu->SP, addr);
-  // cpu->PC = addr;
-
-  // boy->cpu.cycles = 4;
+  boy->cpu.PC = addr;
+  tick(boy, 1);
 }
 
 void rot(BOY *boy) {
@@ -1186,13 +1128,12 @@ void rot(BOY *boy) {
 
 void rlc_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
-  uint8_t data = read_r8(boy, z);
   uint8_t msb = (data & 0x80) >> 7;
 
   uint8_t rl = (data << 1) | msb;
-  write_r8(boy, rl, z);
 
   if (rl == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1209,21 +1150,16 @@ void rlc_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, rl, reg);
 }
 
 void rrc_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t lsb = data & 1;
   uint8_t rrc = (data >> 1) | (lsb << 7);
-  write_r8(boy, rrc, z);
 
   if (rrc == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1240,17 +1176,13 @@ void rrc_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, rrc, reg);
 }
 
 void rl_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t msb = (data & (1 << 7)) >> 7;
   data <<= 1;
@@ -1260,8 +1192,6 @@ void rl_r8(BOY *boy) {
   } else {
     data &= ~1;
   }
-
-  write_r8(boy, data, z);
 
   if (data == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1278,17 +1208,13 @@ void rl_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, data, reg);
 }
 
 void rr_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t lsb = data & 1;
 
@@ -1300,8 +1226,6 @@ void rr_r8(BOY *boy) {
     data &= ~0x80;
   }
 
-  write_r8(boy, data, z);
-
   if (data == 0) {
     set_flag(&boy->cpu, FLAG_Z);
   } else {
@@ -1317,22 +1241,16 @@ void rr_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, data, reg);
 }
 
 void sla_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t msb = (data & 0x80) >> 7;
   data <<= 1;
-
-  write_r8(boy, data, z);
 
   if (data == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1349,24 +1267,18 @@ void sla_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, data, reg);
 }
 
 void sra_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t lsb = data & 1;
   uint8_t msb = data & 0x80;
 
   data = (data >> 1) | msb;
-
-  write_r8(boy, data, z);
 
   if (data == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1383,21 +1295,15 @@ void sra_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, data, reg);
 }
 
 void swap_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   data = (data >> 4) | (data << 4);
-
-  write_r8(boy, data, z);
 
   if (data == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1409,23 +1315,17 @@ void swap_r8(BOY *boy) {
   clear_flag(&boy->cpu, FLAG_N);
   clear_flag(&boy->cpu, FLAG_C);
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, data, reg);
 }
 
 void srl_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t data = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t data = read_r8(boy, reg);
 
   uint8_t lsb = data & 1;
 
   data >>= 1;
-
-  write_r8(boy, data, z);
 
   if (data == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1442,24 +1342,20 @@ void srl_r8(BOY *boy) {
     clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, data, reg);
 }
 
-void bit_y_r8(BOY *boy) {
+void bit_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
   // check if bit y is set
-  // shift y times then mask off all upper 7 bits
+  // shift y times right then mask off all upper 7 bits
 
-  uint8_t y = get_y(boy->cpu.opcode);
-  uint8_t z = get_z(boy->cpu.opcode);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  int bit_index = get_bit_range(boy->cpu.opcode, 5, 3);
 
-  uint8_t bit_y = (read_r8(boy, z) >> y) & 1;
+  uint8_t bit = get_bit(read_r8(boy, reg), bit_index);
 
-  if (bit_y == 0) {
+  if (bit == 0) {
     set_flag(&boy->cpu, FLAG_Z);
   } else {
     clear_flag(&boy->cpu, FLAG_Z);
@@ -1468,47 +1364,36 @@ void bit_y_r8(BOY *boy) {
   clear_flag(&boy->cpu, FLAG_N);
   set_flag(&boy->cpu, FLAG_H);
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 3;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  tick(boy, 1);
 }
 
-void res_y_r8(BOY *boy) {
+void res_r8(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t mask = ~(1 << get_y(boy->cpu.opcode));
+  int bit_index = get_bit_range(boy->cpu.opcode, 5, 3);
+  uint8_t mask = ~(1 << bit_index);
 
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t old = read_r8(boy, z);
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t old = read_r8(boy, reg);
+
+  uint8_t new = old &mask;
+  tick(boy, 1);
+
+  write_r8(boy, new, reg);
+}
+
+void set_r8(BOY *boy) {
+  log_debug("Executing %s", __func__);
+  int bit_index = get_bit_range(boy->cpu.opcode, 5, 3);
+  uint8_t mask = (1 << bit_index);
+
+  uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
+  uint8_t old = read_r8(boy, reg);
 
   uint8_t new = old | mask;
 
-  write_r8(boy, new, z);
+  tick(boy, 1);
 
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
-}
-
-void set_y_r8(BOY *boy) {
-  log_debug("Executing %s", __func__);
-  uint8_t mask = (1 << get_y(boy->cpu.opcode));
-
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t old = read_r8(boy, z);
-
-  uint8_t new = old | mask;
-
-  write_r8(boy, new, z);
-
-  if (z == REG_HL_8) {
-    boy->cpu.cycles = 4;
-  } else {
-    boy->cpu.cycles = 2;
-  }
+  write_r8(boy, new, reg);
 }
 // CPU UTILS BEGINbibin/
 //
@@ -1523,355 +1408,577 @@ void decode_instruction(BOY *boy) {
     boy->cpu.ime = true;
   }
 
-  boy->cpu.opcode = read_byte(&boy->mmu, boy->cpu.PC++);
-
-  // specific bitfields in the opcode which aid in decoding
-  uint8_t y = get_y(boy->cpu.opcode);
-  uint8_t q = get_q(boy->cpu.opcode);
-  uint8_t p = get_p(boy->cpu.opcode);
-  uint8_t z = get_z(boy->cpu.opcode);
-  uint8_t x = get_x(boy->cpu.opcode);
-
-  // check for prefix byte first
-  switch (boy->cpu.opcode) {
-  case 0xCB:
-    boy->cpu.opcode = read_byte(&boy->mmu, boy->cpu.PC++);
-    uint8_t x = get_x(boy->cpu.opcode);
-
-    switch (x) {
-    case 0:
-      rot(boy);
-      return;
-    case 1:
-      bit_y_r8(boy);
-      return;
-    case 2:
-      res_y_r8(boy);
-      break;
-    case 3:
-      set_y_r8(boy);
-      return;
-      break;
-    }
-
-  case 0xDD:
-  case 0xED:
-  case 0xFD:
-    boy->cpu.opcode = read_byte(&boy->mmu, boy->cpu.PC++);
+  if (boy->cpu.is_halted)
     return;
-  }
 
-  switch (x) {
+  boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
 
-    // x = 0
-  case 0: {
-    switch (z) {
-    // z = 0
-    case 0:
-      switch (y) {
-      case 0:
-        nop(boy);
-        return;
+  // local read-only copy to save typing lol
+  uint8_t op = boy->cpu.opcode;
+  // block 0
 
-      case 1:
-        ld_nn_sp(boy);
-        return;
+  // check for no op first
 
-      case 2:
-        stop(boy);
-        return;
-
-      case 3:
-        jr_d(boy);
-        return;
-
-      case 4 ... 7:
-        jr_cc_d(boy);
-        return;
-      }
-
-      break;
-
-      // z = 1
-
-    case 1: {
-      switch (q) {
-      case 0:
-        ld_r16_imm16(boy);
-        return;
-      case 1:
-        add_hl_r16(boy);
-        return;
-      }
-
-      break;
-    }
-
-      // z = 2
-
-    case 2: {
-      switch (q) {
-      case 0:
-        switch (p) {
-        case 0:
-          ld_bc_a(boy);
-          return;
-
-        case 1:
-          ld_de_a(boy);
-          return;
-
-        case 2:
-          ld_hli_a(boy);
-          return;
-
-        case 3:
-          ld_hld_a(boy);
-          return;
-        }
-
-        break;
-
-      case 1:
-        switch (p) {
-        case 0:
-          ld_a_bc(boy);
-          return;
-
-        case 1:
-          ld_a_hli(boy);
-          return;
-
-        case 2:
-          ld_a_de(boy);
-          return;
-
-        case 3:
-          ld_a_hld(boy);
-          return;
-        }
-
-        break;
-      }
-    }
-      // z = 3
-
-    case 3: {
-      switch (q) {
-      case 0:
-        inc_r16(boy);
-        return;
-      case 1:
-        dec_r16(boy);
-        return;
-      }
-      break;
-    }
-
-    // z = 4
-    case 4: {
+  if (op == 0x0) {
+    nop(boy);
+    return;
+  } else if (get_bit_range(op, 7, 6) == 0b00) {
+    if (op == 0b00000111) {
+      rlca(boy);
+      return;
+    } else if (op == 0b00001111) {
+      rrca(boy);
+      return;
+    } else if (op == 0b00010111) {
+      rla(boy);
+      return;
+    } else if (op == 0b00011111) {
+      rra(boy);
+      return;
+    } else if (op == 0b00100111) {
+      daa(boy);
+      return;
+    } else if (op == 0b00101111) {
+      cpl(boy);
+      return;
+    } else if (op == 0b00110111) {
+      scf(boy);
+      return;
+    } else if (op == 0b00111111) {
+      ccf(boy);
+      return;
+    } else if (op == 0b00011000) {
+      jr_d(boy);
+      return;
+    } else if (get_bit_range(op, 7, 5) == 0b001 &&
+               get_bit_range(op, 2, 0) == 0x0) {
+      jr_cc_d(boy);
+      return;
+    } else if (op == 0b00010000) {
+      stop(boy);
+      return;
+    } else if (get_bit_range(op, 3, 0) == 0b0001) {
+      ld_r16_imm16(boy);
+      return;
+    } else if (get_bit_range(op, 3, 0) == 0b0010) {
+      ld_r16mem_a(boy);
+      return;
+    } else if (get_bit_range(op, 3, 0) == 0b1010) {
+      ld_a_r16mem(boy);
+      return;
+    } else if (get_bit_range(op, 3, 0) == 0b1000) {
+      ld_imm16_sp(boy);
+      return;
+    } else if (get_bit_range(op, 3, 0) == 0b0011) {
+      inc_r16(boy);
+      return;
+    } else if (get_bit_range(op, 3, 0) == 0b1011) {
+      dec_r16(boy);
+      return;
+    } else if (get_bit_range(op, 3, 0) == 0b1001) {
+      add_hl_r16(boy);
+      return;
+    } else if (get_bit_range(op, 2, 0) == 0b100) {
       inc_r8(boy);
       return;
-    }
-
-    // z = 5
-    case 5: {
+    } else if (get_bit_range(op, 2, 0) == 0b101) {
       dec_r8(boy);
       return;
-    }
-
-    // z = 6
-    case 6: {
+    } else if (get_bit_range(op, 2, 0) == 0b110) {
       ld_r8_imm8(boy);
       return;
     }
-
-    // z = 7
-    case 7: {
-      switch (y) {
-      case 0:
-        rlca(boy);
-        return;
-      case 1:
-        rrca(boy);
-        return;
-      case 2:
-        rla(boy);
-        return;
-      case 3:
-        rra(boy);
-        return;
-      case 4:
-        daa(boy);
-        return;
-      case 5:
-        cpl(boy);
-        return;
-      case 6:
-        scf(boy);
-        return;
-      case 7:
-        ccf(boy);
-        return;
-      }
-    }
-    }
   }
 
-  // x = 1
-  case 1: {
-    switch (z) {
-      switch (y) {
-      case 6:
-        halt(boy);
-        return;
-      }
-    }
-    ld_r8_r8(boy);
-    return;
-  }
-
-  // x = 2
-  case 2: {
-    alu_a_r8(boy);
-    return;
-  }
-
-  // x = 3
-  case 3: {
-    switch (z) {
-
-    // z = 0
-    case 0: {
-      switch (y) {
-      case 0 ... 3:
-        ret_cc(boy);
-        return;
-      case 4:
-        ld_0xFF00_n_A(boy);
-        return;
-      case 5:
-        add_sp_d(boy);
-        return;
-      case 6:
-        ld_A_0xFF00_n(boy);
-        return;
-      case 7:
-        ld_hl_sp_d(boy);
-        return;
-      }
-      break;
-    }
-
-    // z = 1
-    case 1: {
-      switch (q) {
-      case 0:
-        pop_r16(boy);
-        return;
-      case 1: {
-        switch (p) {
-        case 0:
-          ret(boy);
-          return;
-        case 1:
-          reti(boy);
-          return;
-        case 2:
-          jp_hl(boy);
-        case 3:
-          ld_sp_hl(boy);
-          return;
-        }
-      }
-      }
-      break;
-    }
-
-    // z = 2
-    case 2: {
-      switch (y) {
-      case 0 ... 3:
-        jp_cc_nn(boy);
-        return;
-
-      case 4:
-        ld_0xFF00_C_A(boy);
-        return;
-
-      case 5:
-        ld_nn_a(boy);
-        return;
-
-      case 6:
-        ld_A_0xFF00_C(boy);
-        return;
-
-      case 7:
-        ld_a_nn(boy);
-        return;
-      }
-      break;
-    }
-
-    // z = 3
-    case 3: {
-      switch (y) {
-      case 0:
-        jp_nn(boy);
-        return;
-
-      case 6:
-        di(boy);
-        return;
-
-      case 7:
-        ei(boy);
-        return;
-      }
-      break;
-    }
-
-    // z = 4
-    case 4: {
-      switch (y) {
-      case 0 ... 3:
-        call_cc_nn(boy);
-        return;
-      }
-      break;
-    }
-
-    // z = 5
-    case 5: {
-      switch (q) {
-      case 0:
-        push_r16(boy);
-        return;
-
-      case 1: {
-        switch (p) {
-        case 0:
-          call_nn(boy);
-          return;
-        }
-        break;
-      }
-      }
-      break;
-    }
-
-    // z = 6
-    case 6: {
-      alu_a_n(boy);
+  // block 1, 8 bit register to register load
+  if (get_bit_range(op, 7, 6) == 0b01) {
+    // ld [hl] [hl] maps to halt
+    if (op == 0b01110110) {
+      halt(boy);
       return;
     }
 
-    case 7: {
-      rst(boy);
+    else {
+      ld_r8_r8(boy);
       return;
     }
-    }
   }
+
+  // block 2 8 bit arithmetic
+
+  if (get_bit_range(op, 7, 3) == 0b10000) {
+    add_a_r8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 3) == 0b10001) {
+    adc_a_r8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 3) == 0b10010) {
+    sub_a_r8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 3) == 0b10011) {
+    subc_a_r8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 3) == 0b10100) {
+    and_a_r8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 3) == 0b10101) {
+    xor_a_r8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 3) == 0b10110) {
+    or_a_r8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 3) == 0b10111) {
+    cp_a_r8(boy);
+    return;
   }
+
+  // block 3
+
+  if (op == 0b11000110) {
+    add_a_imm8(boy);
+    return;
+  } else if (op == 0b11001110) {
+    adc_a_imm8(boy);
+    return;
+  } else if (op == 0b11010110) {
+    sub_a_imm8(boy);
+    return;
+  } else if (op == 0b11011110) {
+    subc_a_imm8(boy);
+    return;
+  } else if (op == 0b11100110) {
+    and_a_imm8(boy);
+    return;
+  } else if (op == 0b11101110) {
+    xor_a_imm8(boy);
+    return;
+  } else if (op == 0b11110110) {
+    or_a_imm8(boy);
+    return;
+  } else if (op == 0b11111110) {
+    cp_a_imm8(boy);
+    return;
+  } else if (get_bit_range(op, 7, 5) == 0b110 &&
+             get_bit_range(op, 2, 0) == 0b000) {
+    ret_cc(boy);
+    return;
+  } else if (op == 0b11001001) {
+    ret(boy);
+    return;
+  } else if (op == 0b11011001) {
+    reti(boy);
+    return;
+  } else if (get_bit_range(op, 7, 5) == 0b110 &&
+             get_bit_range(op, 2, 0) == 0b10) {
+    jp_cc_imm16(boy);
+    return;
+  } else if (op == 0b11000011) {
+    jp_imm16(boy);
+    return;
+  } else if (op == 0b11101001) {
+    jp_hl(boy);
+    return;
+  } else if (get_bit_range(op, 7, 5) == 0b110 &&
+             get_bit_range(op, 2, 0) == 0b100) {
+    call_cond_imm16(boy);
+    return;
+  } else if (op == 0b11001101) {
+    call_imm16(boy);
+    return;
+  } else if (get_bit_range(op, 7, 6) == 0b11 &&
+             get_bit_range(op, 2, 0) == 0b111) {
+    rst(boy);
+    return;
+  } else if (get_bit_range(op, 7, 6) == 0b11 &&
+             get_bit_range(op, 3, 0) == 0b0001) {
+    pop_r16stk(boy);
+    return;
+  } else if (get_bit_range(op, 7, 6) == 0b11 &&
+             get_bit_range(op, 3, 0) == 0b0101) {
+    push_r16stk(boy);
+    return;
+
+    // TODO: handle CB prefix insturctions
+  } else if (op == 0b11001011) {
+    handle_cb_prefix(boy);
+    return;
+  } else if (op == 0b11100010) {
+    ldh_c_a(boy);
+    return;
+  } else if (op == 0b11100000) {
+    ldh_imm8_a(boy);
+    return;
+  } else if (op == 0b11101010) {
+    ld_imm16_a(boy);
+    return;
+  } else if (op == 0b11110010) {
+    ldh_a_c(boy);
+    return;
+  } else if (op == 0b11110000) {
+    ldh_a_imm8(boy);
+    return;
+  } else if (op == 0b11111010) {
+    ld_a_imm16(boy);
+    return;
+  } else if (op == 0b11101000) {
+    add_sp_imm8(boy);
+    return;
+  } else if (op == 0b11111000) {
+    ld_hl_sp_imm8(boy);
+    return;
+  } else if (op == 0b11111001) {
+    ld_sp_hl(boy);
+    return;
+  } else if (op == 0b11110011) {
+    di(boy);
+    return;
+  } else if (op == 0b11111011) {
+    ei(boy);
+    return;
+  }
+
+  // check for prefix byte first
+  // switch (boy->cpu.opcode) {
+  // case 0x
+  //
+  // CB:
+  //   boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
+  //   uint8_t x = get_x(boy->cpu.opcode);
+
+  //   switch (x) {
+  //   case 0:
+  //     rot(boy);
+  //     return;
+  //   case 1:
+  //     bit_y_r8(boy);
+  //     return;
+  //   case 2:
+  //     res_y_r8(boy);
+  //     break;
+  //   case 3:
+  //     set_y_r8(boy);
+  //     return;
+  //     break;
+  //   }
+
+  // case 0xDD:
+  // case 0xED:
+  // case 0xFD:
+  //   boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
+  //   return;
+  // }
+
+  // switch (x) {
+
+  //   // x = 0
+  // case 0: {
+  //   switch (z) {
+  //   // z = 0
+  //   case 0:
+  //     switch (y) {
+  //     case 0:
+  //       nop(boy);
+  //       return;
+
+  //     case 1:
+  //       ld_nn_sp(boy);
+  //       return;
+
+  //     case 2:
+  //       stop(boy);
+  //       return;
+
+  //     case 3:
+  //       jr_d(boy);
+  //       return;
+
+  //     case 4 ... 7:
+  //       jr_cc_d(boy);
+  //       return;
+  //     }
+
+  //     break;
+
+  //     // z = 1
+
+  //   case 1: {
+  //     switch (q) {
+  //     case 0:
+  //       ld_r16_imm16(boy);
+  //       return;
+  //     case 1:
+  //       add_hl_r16(boy);
+  //       return;
+  //     }
+
+  //     break;
+  //   }
+
+  //     // z = 2
+
+  //   case 2: {
+  //     switch (q) {
+  //     case 0:
+  //       switch (p) {
+  //       case 0:
+  //         ld_bc_a(boy);
+  //         return;
+
+  //       case 1:
+  //         ld_de_a(boy);
+  //         return;
+
+  //       case 2:
+  //         ld_hli_a(boy);
+  //         return;
+
+  //       case 3:
+  //         ld_hld_a(boy);
+  //         return;
+  //       }
+
+  //       break;
+
+  //     case 1:
+  //       switch (p) {
+  //       case 0:
+  //         ld_a_bc(boy);
+  //         return;
+
+  //       case 1:
+  //         ld_a_hli(boy);
+  //         return;
+
+  //       case 2:
+  //         ld_a_de(boy);
+  //         return;
+
+  //       case 3:
+  //         ld_a_hld(boy);
+  //         return;
+  //       }
+
+  //       break;
+  //     }
+  //   }
+  //     // z = 3
+
+  //   case 3: {
+  //     switch (q) {
+  //     case 0:
+  //       inc_r16(boy);
+  //       return;
+  //     case 1:
+  //       dec_r16(boy);
+  //       return;
+  //     }
+  //     break;
+  //   }
+
+  //   // z = 4
+  //   case 4: {
+  //     inc_r8(boy);
+  //     return;
+  //   }
+
+  //   // z = 5
+  //   case 5: {
+  //     dec_r8(boy);
+  //     return;
+  //   }
+
+  //   // z = 6
+  //   case 6: {
+  //     ld_r8_imm8(boy);
+  //     return;
+  //   }
+
+  //   // z = 7
+  //   case 7: {
+  //     switch (y) {
+  //     case 0:
+  //       rlca(boy);
+  //       return;
+  //     case 1:
+  //       rrca(boy);
+  //       return;
+  //     case 2:
+  //       rla(boy);
+  //       return;
+  //     case 3:
+  //       rra(boy);
+  //       return;
+  //     case 4:
+  //       daa(boy);
+  //       return;
+  //     case 5:
+  //       cpl(boy);
+  //       return;
+  //     case 6:
+  //       scf(boy);
+  //       return;
+  //     case 7:
+  //       ccf(boy);
+  //       return;
+  //     }
+  //   }
+  //   }
+  // }
+
+  // // x = 1
+  // case 1: {
+  //   switch (z) {
+  //     switch (y) {
+  //     case 6:
+  //       halt(boy);
+  //       return;
+  //     }
+  //   }
+  //   ld_r8_r8(boy);
+  //   return;
+  // }
+
+  // // x = 2
+  // case 2: {
+  //   alu_a_r8(boy);
+  //   return;
+  // }
+
+  // // x = 3
+  // case 3: {
+  //   switch (z) {
+
+  //   // z = 0
+  //   case 0: {
+  //     switch (y) {
+  //     case 0 ... 3:
+  //       ret_cc(boy);
+  //       return;
+  //     case 4:
+  //       ld_0xFF00_n_A(boy);
+  //       return;
+  //     case 5:
+  //       add_sp_d(boy);
+  //       return;
+  //     case 6:
+  //       ld_A_0xFF00_n(boy);
+  //       return;
+  //     case 7:
+  //       ld_hl_sp_d(boy);
+  //       return;
+  //     }
+  //     break;
+  //   }
+
+  //   // z = 1
+  //   case 1: {
+  //     switch (q) {
+  //     case 0:
+  //       pop_r16(boy);
+  //       return;
+  //     case 1: {
+  //       switch (p) {
+  //       case 0:
+  //         ret(boy);
+  //         return;
+  //       case 1:
+  //         reti(boy);
+  //         return;
+  //       case 2:
+  //         jp_hl(boy);
+  //       case 3:
+  //         ld_sp_hl(boy);
+  //         return;
+  //       }
+  //     }
+  //     }
+  //     break;
+  //   }
+
+  //   // z = 2
+  //   case 2: {
+  //     switch (y) {
+  //     case 0 ... 3:
+  //       jp_cc_nn(boy);
+  //       return;
+
+  //     case 4:
+  //       ld_0xFF00_C_A(boy);
+  //       return;
+
+  //     case 5:
+  //       ld_nn_a(boy);
+  //       return;
+
+  //     case 6:
+  //       ld_A_0xFF00_C(boy);
+  //       return;
+
+  //     case 7:
+  //       ld_a_nn(boy);
+  //       return;
+  //     }
+  //     break;
+  //   }
+
+  //   // z = 3
+  //   case 3: {
+  //     switch (y) {
+  //     case 0:
+  //       jp_nn(boy);
+  //       return;
+
+  //     case 6:
+  //       di(boy);
+  //       return;
+
+  //     case 7:
+  //       ei(boy);
+  //       return;
+  //     }
+  //     break;
+  //   }
+
+  //   // z = 4
+  //   case 4: {
+  //     switch (y) {
+  //     case 0 ... 3:
+  //       call_cc_nn(boy);
+  //       return;
+  //     }
+  //     break;
+  //   }
+
+  //   // z = 5
+  //   case 5: {
+  //     switch (q) {
+  //     case 0:
+  //       push_r16(boy);
+  //       return;
+
+  //     case 1: {
+  //       switch (p) {
+  //       case 0:
+  //         call_nn(boy);
+  //         return;
+  //       }
+  //       break;
+  //     }
+  //     }
+  //     break;
+  //   }
+
+  //   // z = 6
+  //   case 6: {
+  //     alu_a_n(boy);
+  //     return;
+  //   }
+
+  //   case 7: {
+  //     rst(boy);
+  //     return;
+  //   }
+  //   }
+  // }
+  // }
 }
