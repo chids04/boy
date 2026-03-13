@@ -7,7 +7,10 @@
 
 int main() {
   // read the rom, start cpu and start decoding
-  FILE *f = fopen("./cpu_instrs/individual/03-op sp,hl.gb", "r");
+
+  log_set_quiet(true);
+
+  FILE *f = fopen("./cpu_instrs/individual/11-op a,(hl).gb", "r");
 
   if (f == NULL) {
     perror("error opening rom for reading");
