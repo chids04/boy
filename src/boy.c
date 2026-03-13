@@ -58,7 +58,7 @@ void log_state(BOY *boy) {
          "SP: %04X PC: %04X PCMEM: %02X,%02X,%02X,%02X\n",
          boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D, boy->cpu.E,
          boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
-  fflush(log_fp);
+  //fflush(log_fp);
 }
 
 void run(BOY *boy) {
@@ -69,7 +69,7 @@ void run(BOY *boy) {
   while (true) {
     decode_instruction(boy);
     handle_interrupts(boy);
-    log_state(boy);
+    //log_state(boy);
   }
 }
 

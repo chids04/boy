@@ -34,7 +34,7 @@ void init_cpu(CPU *cpu, uint8_t header_checksum) {
 }
 
 void handle_cb_prefix(BOY *boy) {
-    boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
+  boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
 
   switch (get_bit_range(boy->cpu.opcode, 7, 3)) {
   case 0b00000:
@@ -51,6 +51,9 @@ void handle_cb_prefix(BOY *boy) {
     return;
   case 0b00100:
     sla_r8(boy);
+    return;
+  case 0b00101:
+    sra_r8(boy);
     return;
   case 0b00110:
     swap_r8(boy);
@@ -145,17 +148,13 @@ void jr_cc_d(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t cond = get_bit_range(boy->cpu.opcode, 4, 3);
 
-  printf("jr_cc_d: current condition %d\n", cond);
   int8_t d = (int8_t)read_byte(boy, boy->cpu.PC++);
 
   if (condition(&boy->cpu, cond)) {
     boy->cpu.PC += d;
     tick(boy, 1);
     boy->cpu.cycles = 3;
-  }
-
-  else {
-    printf("jr_cc_d: condition not met\n");
+  } else {
     boy->cpu.cycles = 2;
   }
 }
@@ -181,18 +180,16 @@ void add_hl_r16(BOY *boy) {
   // calc flags
   uint16_t hl = read_r16(&boy->cpu, 2);
 
-  if(data + hl > 0xFFFF) {
-      set_flag(&boy->cpu, FLAG_C);
-  }
-  else {
-      clear_flag(&boy->cpu, FLAG_C);
+  if (data + hl > 0xFFFF) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
   }
 
-  if((data & 0x0FFF) + (hl & 0x0FFF) > 0xFFF) {
-      set_flag(&boy->cpu, FLAG_H);
-  }
-  else {
-      clear_flag(&boy->cpu, FLAG_H);
+  if ((data & 0x0FFF) + (hl & 0x0FFF) > 0xFFF) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
   }
 
   clear_flag(&boy->cpu, FLAG_N);
@@ -380,29 +377,44 @@ void daa(BOY *boy) {
 
   uint8_t adjustment = 0;
 
+  // subtraction adjustment
   if (is_flag_set(&boy->cpu, FLAG_N)) {
     if (is_flag_set(&boy->cpu, FLAG_H)) {
-      adjustment += 0x6;
+      adjustment |= 0x06;
     }
 
     if (is_flag_set(&boy->cpu, FLAG_C)) {
-      adjustment += 0x60;
+      adjustment |= 0x60;
     }
 
     boy->cpu.A -= adjustment;
 
   } else {
 
-    if (is_flag_set(&boy->cpu, FLAG_H) || (boy->cpu.A & 0xF) > 0x9) {
-      adjustment += 0x6;
+    // addition adjustment
+    if (is_flag_set(&boy->cpu, FLAG_H) || (boy->cpu.A & 0xF) > 0x09) {
+      adjustment |= 0x06;
     }
 
     if (is_flag_set(&boy->cpu, FLAG_C) || boy->cpu.A > 0x99) {
-      adjustment += 0x60;
+      adjustment |= 0x60;
+
+      // ensure carry flag is set
+      // this could be unset if A is greater thatn 0x99 but less than 0xFF (too
+      // big for BCD but small enough to fit in 8 bit register)
+      set_flag(&boy->cpu, FLAG_C);
     }
 
     boy->cpu.A += adjustment;
   }
+
+  if (boy->cpu.A == 0) {
+    set_flag(&boy->cpu, FLAG_Z);
+  } else {
+    clear_flag(&boy->cpu, FLAG_Z);
+  }
+
+  clear_flag(&boy->cpu, FLAG_H);
 
   boy->cpu.cycles = 1;
 }
@@ -522,8 +534,21 @@ void adc_a_r8(BOY *boy) {
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
 
   // set flags
-  add8_half_carry(data + carry, &boy->cpu);
-  add8_carry(data + carry, &boy->cpu);
+
+  // check for half carry
+  if (((boy->cpu.A & 0xF) + (data & 0xF) + carry) > 0xF) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
+  }
+
+  // check for carry
+  if ((int)(boy->cpu.A + data + carry) > 0xFF) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
+  }
+
   clear_flag(&boy->cpu, FLAG_N);
 
   boy->cpu.A += data + carry;
@@ -570,19 +595,30 @@ void subc_a_r8(BOY *boy) {
   uint8_t data = read_r8(boy, reg);
 
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
-  data += carry;
+
+  if (((int)(boy->cpu.A & 0xF) - (int)(data & 0xF) - (int)carry) < 0) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
+  }
+
+  if (((int)(boy->cpu.A) - (int)data - (int)carry) < 0) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
+  }
 
   set_flag(&boy->cpu, FLAG_N);
-  sub8_half_carry(data, &boy->cpu);
-  sub8_carry(data, &boy->cpu);
 
-  boy->cpu.A -= data;
+  boy->cpu.A -= data + carry;
 
   if (boy->cpu.A == 0) {
     set_flag(&boy->cpu, FLAG_Z);
   } else {
     clear_flag(&boy->cpu, FLAG_Z);
   }
+
+
 }
 
 void and_a_r8(BOY *boy) {
@@ -1372,7 +1408,8 @@ void decode_instruction(BOY *boy) {
     boy->cpu.ime = true;
   }
 
-  if(boy->cpu.is_halted) return;
+  if (boy->cpu.is_halted)
+    return;
 
   boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
 

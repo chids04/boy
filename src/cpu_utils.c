@@ -262,6 +262,7 @@ void write_r16stk(CPU *cpu, uint8_t reg, uint16_t data) {
   case 3:
     cpu->A = data >> 8;
     cpu->F = data & 0xFF;
+    cpu->F &= 0xF0;
   }
 }
 
@@ -307,6 +308,7 @@ void dec16_half_carry(const uint8_t value, CPU *cpu) {
   }
 }
 
+
 void add8_half_carry(const uint8_t value, CPU *cpu) {
   uint8_t lower_a = cpu->A & 0xF;
   uint8_t lower_r8 = value & 0xF;
@@ -319,7 +321,8 @@ void add8_half_carry(const uint8_t value, CPU *cpu) {
 }
 
 void add8_carry(const uint8_t value, CPU *cpu) {
-  if ((cpu->A + value) > 0xFF) {
+    // cast to int since uint8_t cant be bigger than 0xFF
+    if ((int)(cpu->A + value) > 0xFF) {
     set_flag(cpu, FLAG_C);
   } else {
     clear_flag(cpu, FLAG_C);
