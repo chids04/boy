@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
 static FILE *log_fp = NULL;
 
 void close_log_file(void) {
@@ -67,40 +68,77 @@ void run(BOY *boy) {
   log_state(boy);
 
   while (true) {
-    decode_instruction(boy);
-    handle_interrupts(boy);
-    //log_state(boy);
+    decode_instruction(boy, false);
+    log_state(boy);
   }
 }
 
-void handle_interrupts(BOY *boy) {
+void check_interrupts(BOY *boy) {
   log_set_level(1);
 
-  if (boy->cpu.ime && boy->mmu.IE) {
-    if (get_bit(boy->mmu.IE, 0) && get_bit(boy->mmu.IF, 0)) {
-      // handle vblank
-      log_warn("vblank requested\n");
-    }
+  // bitwise & will set the bit 1 the interrupt has been requested and enabled
+  uint8_t pending_interrupts = boy->mmu.IF & boy->mmu.IE;
 
-    if (get_bit(boy->mmu.IE, 1) && get_bit(boy->mmu.IF, 1)) {
-      // handle LCD
-      log_warn("lcd interrupt requested\n");
-    }
+  if(pending_interrupts != 0){
+      boy->cpu.is_halted = false;
 
-    if (get_bit(boy->mmu.IE, 2) && get_bit(boy->mmu.IF, 2)) {
-      // handle Timer
-      log_warn("timer interrupt requested\n");
-    }
-
-    if (get_bit(boy->mmu.IE, 3) && get_bit(boy->mmu.IF, 3)) {
-      // handle Serial
-      log_warn("serial interrupt requested\n");
-      //
-    }
-
-    if (get_bit(boy->mmu.IE, 4) && get_bit(boy->mmu.IF, 4)) {
-      // handle handle joypad
-      log_warn("joypad interrupt requested\n");
-    }
+      // only handle interrupts if IME is set
+      if(boy->cpu.IME == true) {
+          handle_interrupts(boy, pending_interrupts);
+      }
   }
+
+}
+
+void handle_interrupts(BOY *boy, uint8_t interrupts){
+    // set so no other interrupts can occur mid interrupt
+    boy->cpu.IME = false;
+
+    // clear the bits of the IF flag to signal that the interrupt has been serviced
+
+    if(get_bit(interrupts, VBLANK) == 1) {
+        clear_bit(&boy->mmu.IF, VBLANK);
+        call_interrupt(boy, VBLANK);
+
+    }
+    else if(get_bit(interrupts, LCD) == 1) {
+        clear_bit(&boy->mmu.IF, LCD);
+        call_interrupt(boy, LCD);
+    }
+    else if(get_bit(interrupts, TIMER) == 1) {
+        clear_bit(&boy->mmu.IF, TIMER);
+        call_interrupt(boy, TIMER);
+
+    }
+
+    else if(get_bit(interrupts, SERIAL) == 1) {
+        clear_bit(&boy->mmu.IF, SERIAL);
+        call_interrupt(boy, SERIAL);
+    }
+
+    else if(get_bit(interrupts, JOYPAD) == 1) {
+        clear_bit(&boy->mmu.IF, JOYPAD);
+        call_interrupt(boy, JOYPAD);
+    }
+}
+
+void call_interrupt(BOY *boy, INTERRUPTS interrupt){
+    // two wait state where cpu does nothing
+    tick(boy, 2);
+
+    uint16_t addr;
+
+    switch(interrupt) {
+        case VBLANK: addr = 0x40; break;
+        case LCD: addr = 0x48; break;
+        case TIMER: addr = 0x50; break;
+        case SERIAL: addr = 0x58; break;
+        case JOYPAD: addr = 0x60; break;
+    }
+
+    write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+    write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+
+    boy->cpu.PC = addr;
+    tick(boy, 1);
 }
