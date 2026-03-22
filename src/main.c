@@ -10,7 +10,7 @@ int main() {
 
   log_set_quiet(true);
 
-  FILE *f = fopen("./cpu_instrs/individual/10-bit ops.gb", "r");
+  FILE *f = fopen("./cpu_instrs/individual/02-interrupts.gb", "r");
 
   if (f == NULL) {
     perror("error opening rom for reading");

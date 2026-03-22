@@ -4,14 +4,13 @@
 
 <h2>progress</h2>
 <ul>
-    <li>currently passes 9/10 of the [blargg](https://github.com/retrio/gb-test-roms) cpu test roms, since i have not fully implemented interrupts yet</li>
+    <li>currently passes 10/10 of the [blargg](https://github.com/retrio/gb-test-roms) cpu test roms</li>
     <li>for testing each opcode, [gb doctor](https://github.com/robert/gameboy-doctor) was used to compare the cpu state after each cycle with the state of a working emulator</li>
     <li>currently only mbc1 is implemented but all memory maps have been implemented</li>
 </ul>
 
 <h2>todo</h2>
 <ul>
-    <li>implement interrupts, just need to add the handlers, they can already be requested and cancelled</li>
     <li>ppu</li>
     <li>gui for graphical debugging and playing game (duh)</li>
     <li>save states</li>

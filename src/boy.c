@@ -9,6 +9,7 @@
 
 
 static FILE *log_fp = NULL;
+static int line = 0;
 
 void close_log_file(void) {
   if (log_fp)
@@ -43,11 +44,13 @@ void log_state(BOY *boy) {
     }
   }
 
+  line++;
+
   uint16_t pc = boy->cpu.PC;
-  uint8_t m0 = read_byte(boy, pc);
-  uint8_t m1 = read_byte(boy, (pc + 1) & 0xFFFF);
-  uint8_t m2 = read_byte(boy, (pc + 2) & 0xFFFF);
-  uint8_t m3 = read_byte(boy, (pc + 3) & 0xFFFF);
+  uint8_t m0 = read_byte_no_tick(boy, pc);
+  uint8_t m1 = read_byte_no_tick(boy, (pc + 1) & 0xFFFF);
+  uint8_t m2 = read_byte_no_tick(boy, (pc + 2) & 0xFFFF);
+  uint8_t m3 = read_byte_no_tick(boy, (pc + 3) & 0xFFFF);
 
   fprintf(log_fp,
           "A:%02X F:%02X B:%02X C:%02X D:%02X E:%02X H:%02X L:%02X "
@@ -55,16 +58,17 @@ void log_state(BOY *boy) {
           boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D,
           boy->cpu.E, boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
 
-  printf("A: %02X F: %02X B: %02X C: %02X D: %02X E: %02X H: %02X L: %02X "
-         "SP: %04X PC: %04X PCMEM: %02X,%02X,%02X,%02X\n",
-         boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D, boy->cpu.E,
-         boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
+  // printf("A: %02X F: %02X B: %02X C: %02X D: %02X E: %02X H: %02X L: %02X "
+  //        "SP: %04X PC: %04X PCMEM: %02X,%02X,%02X,%02X\n",
+  //        boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D, boy->cpu.E,
+  //        boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
   //fflush(log_fp);
 }
 
 void run(BOY *boy) {
 
   // log state just before execution
+
   log_state(boy);
 
   while (true) {

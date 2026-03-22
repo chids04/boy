@@ -18,7 +18,7 @@ static inline uint8_t get_bit_range(uint8_t byte, int high, int low) {
 }
 
 static inline void clear_bit(uint8_t *data, int bit_position) {
-    *data |= ~(1 << bit_position);
+    *data &= ~(1 << bit_position);
 }
 
 static inline void set_bit(uint8_t *data, int bit_position) {

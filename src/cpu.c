@@ -742,6 +742,8 @@ void ldh_imm8_a(BOY *boy) {
 void ldh_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t n = read_imm8(boy);
+
+
   uint16_t src = 0xFF00 | n;
   boy->cpu.A = read_byte(boy, src);
 }
@@ -844,21 +846,22 @@ void jp_cc_imm16(BOY *boy) {
 
 void ldh_c_a(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t dest = 0xFF00 + boy->cpu.C;
+  uint16_t dest = 0xFF00 + boy->cpu.C;
   write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 2;
 }
 
 void ldh_a_c(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t src = 0xFF00 + boy->cpu.C;
+  uint16_t src = 0xFF00 + boy->cpu.C;
+
   boy->cpu.A = read_byte(boy, src);
   boy->cpu.cycles = 2;
 }
 
 void ld_nn_a(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t dest = read_imm16(boy);
+  uint16_t dest = read_imm16(boy);
   write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 4;
 }
@@ -1433,12 +1436,15 @@ void decode_instruction(BOY *boy, bool halt_bug) {
     boy->cpu.enable_interrupts = true;
   } else if (boy->cpu.enable_interrupts) {
     boy->cpu.IME = true;
+    boy->cpu.enable_interrupts = false;
   }
 
   check_interrupts(boy);
 
-  if (boy->cpu.is_halted)
-    return;
+  if (boy->cpu.is_halted){
+      tick(boy, 1);
+      return;
+  }
 
   if(halt_bug){
       // dont increment pc if halt bug occurs (instruction after halt executes twice);
