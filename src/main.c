@@ -10,7 +10,7 @@ int main() {
 
   log_set_quiet(true);
 
-  FILE *f = fopen("./cpu_instrs/individual/11-op a,(hl).gb", "r");
+  FILE *f = fopen("./cpu_instrs/cpu_instrs.gb", "r");
 
   if (f == NULL) {
     perror("error opening rom for reading");

@@ -470,7 +470,16 @@ void ld_r8_r8(BOY *boy) {
 
 void halt(BOY *boy) {
   log_debug("Executing %s", __func__);
-  boy->cpu.is_halted = true;
+
+  uint8_t pending_interrupts = boy->mmu.IF & boy->mmu.IE;
+
+  if(pending_interrupts){
+      decode_instruction(boy, true);
+  }
+  else {
+      boy->cpu.is_halted = true;
+  }
+
 }
 
 void alu_a_r8(BOY *boy) {
@@ -733,6 +742,8 @@ void ldh_imm8_a(BOY *boy) {
 void ldh_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t n = read_imm8(boy);
+
+
   uint16_t src = 0xFF00 | n;
   boy->cpu.A = read_byte(boy, src);
 }
@@ -835,21 +846,22 @@ void jp_cc_imm16(BOY *boy) {
 
 void ldh_c_a(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t dest = 0xFF00 + boy->cpu.C;
+  uint16_t dest = 0xFF00 + boy->cpu.C;
   write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 2;
 }
 
 void ldh_a_c(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t src = 0xFF00 + boy->cpu.C;
+  uint16_t src = 0xFF00 + boy->cpu.C;
+
   boy->cpu.A = read_byte(boy, src);
   boy->cpu.cycles = 2;
 }
 
 void ld_nn_a(BOY *boy) {
   log_debug("Executing %s", __func__);
-  uint8_t dest = read_imm16(boy);
+  uint16_t dest = read_imm16(boy);
   write_byte(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 4;
 }
@@ -877,7 +889,7 @@ void ei(BOY *boy) {
 void di(BOY *boy) {
   log_debug("Executing %s", __func__);
   boy->cpu.interrupt_delay = false;
-  boy->cpu.ime = false;
+  boy->cpu.IME = false;
 }
 
 void call_cond_imm16(BOY *boy) {
@@ -922,12 +934,22 @@ void add_a_imm8(BOY *boy) {
 void adc_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t data = read_imm8(boy);
-
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
 
   // set flags
-  add8_half_carry(data + carry, &boy->cpu);
-  add8_carry(data + carry, &boy->cpu);
+  if (((boy->cpu.A & 0xF) + (data & 0xF) + carry) > 0xF) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
+  }
+
+  // check for carry
+  if ((int)(boy->cpu.A + data + carry) > 0xFF) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
+  }
+
   clear_flag(&boy->cpu, FLAG_N);
 
   boy->cpu.A += data + carry;
@@ -963,15 +985,23 @@ void sub_a_imm8(BOY *boy) {
 void subc_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t data = read_imm8(boy);
-
   uint8_t carry = (uint8_t)is_flag_set(&boy->cpu, FLAG_C);
-  data += carry;
+
+  if (((int)(boy->cpu.A & 0xF) - (int)(data & 0xF) - (int)carry) < 0) {
+    set_flag(&boy->cpu, FLAG_H);
+  } else {
+    clear_flag(&boy->cpu, FLAG_H);
+}
+
+  if (((int)(boy->cpu.A) - (int)data - (int)carry) < 0) {
+    set_flag(&boy->cpu, FLAG_C);
+  } else {
+    clear_flag(&boy->cpu, FLAG_C);
+  }
 
   set_flag(&boy->cpu, FLAG_N);
-  sub8_half_carry(data, &boy->cpu);
-  sub8_carry(data, &boy->cpu);
 
-  boy->cpu.A -= data;
+  boy->cpu.A -= data + carry;
 
   if (boy->cpu.A == 0) {
     set_flag(&boy->cpu, FLAG_Z);
@@ -1400,22 +1430,35 @@ void set_r8(BOY *boy) {
 //
 //
 
-void decode_instruction(BOY *boy) {
+void decode_instruction(BOY *boy, bool halt_bug) {
   if (boy->cpu.interrupt_delay) {
     boy->cpu.interrupt_delay = false;
     boy->cpu.enable_interrupts = true;
   } else if (boy->cpu.enable_interrupts) {
-    boy->cpu.ime = true;
+    boy->cpu.IME = true;
+    boy->cpu.enable_interrupts = false;
   }
 
-  if (boy->cpu.is_halted)
-    return;
+  check_interrupts(boy);
 
-  boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
+  if (boy->cpu.is_halted){
+      tick(boy, 1);
+      return;
+  }
+
+  if(halt_bug){
+      // dont increment pc if halt bug occurs (instruction after halt executes twice);
+      boy->cpu.opcode = read_byte(boy, boy->cpu.PC);
+  }
+  else {
+      boy->cpu.opcode = read_byte(boy, boy->cpu.PC++);
+
+  }
 
   // local read-only copy to save typing lol
   uint8_t op = boy->cpu.opcode;
   // block 0
+
 
   // check for no op first
 
