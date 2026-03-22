@@ -4,7 +4,7 @@
 
 <h2>progress</h2>
 <ul>
-    <li>currently passes 10/10 of the [blargg](https://github.com/retrio/gb-test-roms) cpu test roms</li>
+    <li>currently passes 11/11 of the [blargg](https://github.com/retrio/gb-test-roms) cpu test roms</li>
     <li>for testing each opcode, [gb doctor](https://github.com/robert/gameboy-doctor) was used to compare the cpu state after each cycle with the state of a working emulator</li>
     <li>currently only mbc1 is implemented but all memory maps have been implemented</li>
 </ul>
@@ -15,7 +15,7 @@
     <li>gui for graphical debugging and playing game (duh)</li>
     <li>save states</li>
     <li>link cable emulation (much harder than i thought since link cable is much much faster than any network connection possible)</li>
-    <li>implemented more mbcs</li>
+    <li>implement more mbcs</li>
 </ul>
 
 <p>in the .zed folder there are tasks to run, debug and test the emulator, they work in the zed ide but can easily but typed into command line if u use something else</p>
