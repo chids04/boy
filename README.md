@@ -21,3 +21,6 @@
 <p>in the .zed folder there are tasks to run, debug and test the emulator, they work in the zed ide but can easily but typed into command line if u use something else</p>
 
 <p>prs are welcome, please dont use ai since it can easily one shot this and it would be nice to be able to use this for learning</p>
+
+
+
