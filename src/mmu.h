@@ -132,6 +132,7 @@ int get_zero_bank_num(MMU *mmu);
 int get_high_bank_num(MMU *mmu);
 
 uint8_t read_byte(BOY *boy, uint16_t address);
+uint8_t read_byte_no_tick(BOY *boy, uint16_t address);
 void write_byte(BOY *boy, uint16_t address, uint8_t data);
 
 void write_sram(MMU *mmu, uint16_t address, uint8_t data);

@@ -139,22 +139,19 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
   } else if (address >= IO_START && address <= IO_END) {
     // handle IO registers
 
-    if (address == 0xFF01) {
-      boy->mmu.SB = data;
+    handle_io_write(boy, address, data);
 
-      // hook for viewing debug output in test roms
-    } else if (address == 0xFF02 && data == 0x81) {
-      printf("%c", boy->mmu.SB);
-      fflush(stdout);
-    }
-
+    // handle HRAM
   } else if (address >= HRAM_START && address <= HRAM_END) {
     boy->mmu.hram[address - HRAM_START] = data;
 
-    // handle HRAM
   } else if (address == 0xFFFF) {
     boy->mmu.IE = data;
   }
+
+  // all writes take 1 m cycle
+  tick(boy, 1);
+
 }
 
 uint8_t handle_cart_read(MMU *mmu, uint16_t address) {
@@ -284,11 +281,14 @@ void handle_timers_write(BOY *boy, uint16_t address, uint8_t data) {
     break;
   case 0xFF05:
     // TIMA is read only
+    boy->mmu.TIMA = data;
     break;
   case 0xFF06:
     boy->mmu.TMA = data;
+    break;
   case 0xFF07:
     boy->mmu.TAC = data;
+    break;
   }
 }
 
@@ -305,7 +305,7 @@ uint8_t handle_io_read(BOY *boy, uint16_t address) {
     // timer and div
     data = handle_timers_read(boy, address);
   } else if (address == 0xFF0F) {
-    data = boy->mmu.IF;
+    data = boy->mmu.IF | 0xE0;
   } else if (address >= 0xFF10 && address <= 0xFF26) {
     // handle audio here
     log_error("audio handler for address 0x%04X not implemented", address);
@@ -332,7 +332,15 @@ void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
   } else if (address == 0xFF01) {
     boy->mmu.SB = data;
   } else if (address == 0xFF02) {
+
     boy->mmu.SC = data;
+
+    // hook for viewing debug output in test roms
+    if(data == 0x81) {
+        printf("%c", boy->mmu.SB);
+        fflush(stdout);
+    }
+
   } else if (address >= 0xFF04 && address <= 0xFF07) {
     // timer and div
     handle_timers_write(boy, address, data);
@@ -508,4 +516,53 @@ uint8_t rom_mask(enum ROM_SIZE size) {
     fprintf(stderr, "unsupported rom size selected for masking");
     exit(1);
   }
+}
+
+uint8_t read_byte_no_tick(BOY *boy, uint16_t address) {
+  log_set_level(1);
+
+  uint8_t data = 0xFF;
+
+  if (address >= ROM_BANK0_START && address <= ROM_BANK1_END) {
+    // handle cartridge read
+    // may need to tick timers inside the mbc to handle the timing differences
+    data = handle_cart_read(&boy->mmu, address);
+  } else if (address >= VRAM_START && address <= VRAM_END) {
+    log_warn("VRAM handler for address 0x%04X not implemented\n", address);
+    // handle vram reads here
+    // not implemented yet
+  } else if (address >= SRAM_START && address <= SRAM_END) {
+    // handle external ram read here
+    data = read_sram(&boy->mmu, address);
+
+  } else if (address >= WRAM_START && address <= WRAM_END) {
+    data = boy->mmu.wram[address - WRAM_START];
+
+  } else if (address >= 0xE000 && address <= 0xFDFF) {
+    // handle echo ram
+    // technically use of this area is prohibted so no need to emulate
+    log_warn("ECHO RAM handler for address 0x%04X not implemented", address);
+  } else if (address >= 0xFE00 && address <= 0xFE9F) {
+    // handle oam
+    log_warn("OAM handler for address 0x%04X not implemented", address);
+  } else if (address >= 0xFEA0 && address <= 0xFEFF) {
+    // use of this area prohibited
+    log_warn("prohibited area handler for address 0x%04X not implemented",
+             address);
+  } else if (address >= 0xFF00 && address <= 0xFF7F) {
+    // handle IO registers
+    data = handle_io_read(boy, address);
+
+  } else if (address >= 0xFF80 && address <= 0xFFFE) {
+    // handle HRAM
+    data = boy->mmu.hram[address - HRAM_START];
+
+  } else if (address == 0xFFFF) {
+    // interrupt enable
+    data = boy->mmu.IE;
+  }
+
+  // dont tick for debug
+
+  return data;
 }

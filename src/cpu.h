@@ -29,7 +29,7 @@ struct CPU {
 
   uint16_t SP; // stack pointer
   uint16_t PC; // program counter
-  bool ime;
+  bool IME;
 
   uint8_t opcode;
   int cycles;
@@ -254,4 +254,4 @@ void add8_carry(const uint8_t value, CPU *cpu);
 void sub8_half_carry(const uint8_t value, CPU *cpu);
 void sub8_carry(const uint8_t value, CPU *cpu);
 
-void decode_instruction(BOY *boy);
+void decode_instruction(BOY *boy, bool halt_bug);
