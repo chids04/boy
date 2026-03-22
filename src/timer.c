@@ -6,7 +6,6 @@ void inc_tima(TIMERS *timers) {
   if (timers->mmu->TIMA == 0xFF) {
     timers->mmu->TIMA = 0;
     timers->pending_tima_reset = true;
-    timers->cycles_at_reset = timers->mmu->DIV;
   } else {
     timers->mmu->TIMA += 1;
   }
@@ -46,6 +45,9 @@ void increment_timers(TIMERS *timers, int m_cycles) {
   if (timers->pending_tima_reset) {
     timers->mmu->TIMA = timers->mmu->TMA;
     timers->pending_tima_reset = false;
+
+    // request timer interrupt;
+    set_bit(&timers->mmu->IF, TIMER);
   } else if (and_result == 0 && timers->prev_and_result == 1 &&
              !timers->pending_tima_reset) {
     inc_tima(timers);
