@@ -7,6 +7,19 @@ this is a learning exercise for me to learn the inner workings of a computer
 * for testing each opcode, [gb doctor](https://github.com/robert/gameboy-doctor) was used to compare the cpu state after each cycle with the state of a working emulator
 * currently only mbc1 is implemented but all memory maps have been implemented
 
+## build and run
+* build in debug mode
+```
+cmake --build --preset debug
+```
+
+* build in release mode
+```
+cmake --build --preset release
+```
+
+the `gb_emu` binary will be inside the `/build` folder, currently this will run the cpu tests in the `/cpu_instrs` folder
+
 ## todo
 * ppu
 * gui for graphical debugging and playing game (duh)
