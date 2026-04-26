@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 
+
 static FILE *log_fp = NULL;
 static int line = 0;
 
@@ -26,55 +27,46 @@ void init_components(BOY *boy) {
   boy->timers.mmu = &boy->mmu;
 
   atexit(close_log_file);
+
+
 }
 
 void tick(BOY *boy, int cycles) {
-
   increment_timers(&boy->timers, cycles);
   // also tick the ppu here too
+  handle_dma(boy);
 };
 
-void log_state(BOY *boy) {
-  if (log_fp == NULL) {
-    log_fp = fopen("test/state.log", "w");
+void handle_dma(BOY *boy) {
+  // transfer one byte at a time
 
-    if (log_fp == NULL) {
-      log_error("failed to open file for logging state, exiting.....");
-      exit(1);
-    }
+  // one m cycle delay
+  if(boy->mmu.enabling_dma) {
+    boy->mmu.dma_transfer = true;
+    boy->mmu.dma_progress = 0;
+    boy->mmu.enabling_dma = false;
+    return;
   }
 
-  line++;
+  if(boy->mmu.dma_transfer) {
+    if(boy->mmu.dma_progress < 160) {
+      uint16_t src = boy->mmu.dma_src + boy->mmu.dma_progress;
+      uint8_t data = handle_dma_read(boy, src);
+      handle_dma_write(&boy->mmu, boy->mmu.dma_progress, data);
+      boy->mmu.dma_progress++;
+    }
+    else if(boy->mmu.dma_progress == 160) {
+      boy->mmu.dma_transfer = false;
+      boy->mmu.dma_progress = 0;
+    }
 
-  uint16_t pc = boy->cpu.PC;
-  uint8_t m0 = read_byte_no_tick(boy, pc);
-  uint8_t m1 = read_byte_no_tick(boy, (pc + 1) & 0xFFFF);
-  uint8_t m2 = read_byte_no_tick(boy, (pc + 2) & 0xFFFF);
-  uint8_t m3 = read_byte_no_tick(boy, (pc + 3) & 0xFFFF);
-
-  fprintf(log_fp,
-          "A:%02X F:%02X B:%02X C:%02X D:%02X E:%02X H:%02X L:%02X "
-          "SP:%04X PC:%04X PCMEM:%02X,%02X,%02X,%02X\n",
-          boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D,
-          boy->cpu.E, boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
-
-  // printf("A: %02X F: %02X B: %02X C: %02X D: %02X E: %02X H: %02X L: %02X "
-  //        "SP: %04X PC: %04X PCMEM: %02X,%02X,%02X,%02X\n",
-  //        boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D, boy->cpu.E,
-  //        boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
-  //fflush(log_fp);
+  }
 }
 
-void run(BOY *boy) {
-
-  // log state just before execution
-
+void step_boy(BOY *boy) {
+  decode_instruction(boy, false);
+  // handle dma transfer
   log_state(boy);
-
-  while (true) {
-    decode_instruction(boy, false);
-    log_state(boy);
-  }
 }
 
 void check_interrupts(BOY *boy) {
@@ -145,4 +137,35 @@ void call_interrupt(BOY *boy, INTERRUPTS interrupt){
 
     boy->cpu.PC = addr;
     tick(boy, 1);
+}
+
+void log_state(BOY *boy) {
+  if (log_fp == NULL) {
+    log_fp = fopen("test/state.log", "w");
+
+    if (log_fp == NULL) {
+      log_error("failed to open file for logging state, exiting.....");
+      exit(1);
+    }
+  }
+
+  line++;
+
+  uint16_t pc = boy->cpu.PC;
+  uint8_t m0 = read_byte_no_tick(boy, pc);
+  uint8_t m1 = read_byte_no_tick(boy, (pc + 1) & 0xFFFF);
+  uint8_t m2 = read_byte_no_tick(boy, (pc + 2) & 0xFFFF);
+  uint8_t m3 = read_byte_no_tick(boy, (pc + 3) & 0xFFFF);
+
+  fprintf(log_fp,
+          "A:%02X F:%02X B:%02X C:%02X D:%02X E:%02X H:%02X L:%02X "
+          "SP:%04X PC:%04X PCMEM:%02X,%02X,%02X,%02X\n",
+          boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D,
+          boy->cpu.E, boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
+
+  // printf("A: %02X F: %02X B: %02X C: %02X D: %02X E: %02X H: %02X L: %02X "
+  //        "SP: %04X PC: %04X PCMEM: %02X,%02X,%02X,%02X\n",
+  //        boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D, boy->cpu.E,
+  //        boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
+  //fflush(log_fp);
 }

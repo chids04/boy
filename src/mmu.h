@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include <stdint.h>
 
 #define ROM_BANK0_START 0x0000
 #define ROM_BANK0_END 0x3FFF
@@ -37,6 +38,8 @@
 #define WRAM_SIZE 0x2000
 #define VRAM_SIZE 0x2000
 #define HRAM_SIZE 0x7F
+#define OAM_SIZE 0xA0
+
 
 enum MBC_TYPE {
   MBC_NONE = 0x0,
@@ -94,10 +97,15 @@ struct MMU {
   uint8_t wram[WRAM_SIZE];
   uint8_t vram[VRAM_SIZE];
   uint8_t hram[HRAM_SIZE];
+  uint8_t oam[OAM_SIZE];
 
   struct mbc mbc;
   enum RAM_SIZE ram_size;
   enum ROM_SIZE rom_size;
+  bool dma_transfer;
+  bool enabling_dma;
+  int dma_progress;
+  uint16_t dma_src;
 
   // interrupt registers
   uint8_t IF;
@@ -147,6 +155,9 @@ void handle_io_write(BOY *boy, uint16_t address, uint8_t data);
 
 uint8_t handle_mbc1_read(MMU *mmu, uint16_t address);
 void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data);
+
+uint8_t handle_dma_read(BOY *boy, uint16_t address);
+void handle_dma_write(MMU *mmu, int offset, uint8_t data);
 
 int ram_size_bytes(enum RAM_SIZE size);
 

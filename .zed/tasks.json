@@ -10,7 +10,7 @@
   {
     "label": "run binary",
     "cwd": "$ZED_WORKTREE_ROOT",
-    "command": "cmake --build --preset debug && ./build/debug/gb_emu",
+    "command": "cmake --build --preset debug && ./build/debug/boy",
   },
   {
     "label": "run tests",

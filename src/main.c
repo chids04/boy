@@ -1,14 +1,16 @@
 #include "boy.h"
 #include "common.h"
-#include "log.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "raylib.h"
+
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
 
 int main() {
   // read the rom, start cpu and start decoding
 
-  log_set_quiet(true);
 
   FILE *f = fopen("./cpu_instrs/cpu_instrs.gb", "r");
 
@@ -39,11 +41,51 @@ int main() {
   fclose(f);
   printf("Successfully loaded %ld bytes.\n", f_size);
 
+  const int WINDOW_WIDTH = 800;
+  const int WINDOW_HEIGHT = 700;
+
+  // stick to original 10:9 aspect ratio of the gameboy
+  const int SCREEN_WIDTH = 400;
+  const int SCREEN_HEIGHT = 360;
+
+
+  // -10 for some padding
+  const int DEBUG_PANEL_WIDTH = WINDOW_WIDTH - 10;
+  const int DEBUG_PANEL_HEIGHT = 200;
+
+  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "boy");
+
   // skip the bootrom for now
   BOY boy;
   load_rom(&boy, rom);
   init_components(&boy);
-  run(&boy);
+
+  log_state(&boy);
+
+
+  while (!WindowShouldClose()) {
+    step_boy(&boy);
+
+    BeginDrawing();
+    ClearBackground(RAYWHITE);
+
+    // placeholder for the gameboy display
+    DrawRectangle(WINDOW_WIDTH/2 - SCREEN_WIDTH / 2, 10, SCREEN_WIDTH, SCREEN_HEIGHT, BLACK);
+    DrawRectangleLines(WINDOW_WIDTH/2 - DEBUG_PANEL_WIDTH / 2, SCREEN_HEIGHT + 15, DEBUG_PANEL_WIDTH, DEBUG_PANEL_HEIGHT, PINK);
+
+
+    GuiLabel((Rectangle){0,0, 100, 20},  "test");
+
+
+
+
+
+    // DrawRectangle(225, 132, 24, 84, BLACK);
+    // DrawRectangle(195, 161, 84, 25, BLACK);
+    EndDrawing();
+  }
+
+  CloseWindow();
 
   free(rom);
 
