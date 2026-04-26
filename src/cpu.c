@@ -1439,6 +1439,7 @@ void decode_instruction(BOY *boy, bool halt_bug) {
     boy->cpu.enable_interrupts = false;
   }
 
+
   check_interrupts(boy);
 
   if (boy->cpu.is_halted){

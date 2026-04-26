@@ -1,14 +1,16 @@
-read_r16 and write_r16 have different has_SP and has_AF boolean checks these need to be unified into one
+got most of the cpu working, moving onto the ppu now
 
-timing implementation
+i want the core library to contain the main emulation
+and then a seperate gui libary that is used for displaying
+but i dont really want to mix the gui code into the core emulation code
 
-instead of returning the number of cycles passed after every instruction and getting the timers, ppu, dma to catch up,
+maybe two seperate libraries, i already have the core lib, this can just output a buffer containg draw commands for raylib to follow
 
-i can tick inside the cpu mid instruction
-the tick function will tick the timers, and i can also tick just before a mem read/write is about to occur too
+also want to build a debugger so that i can step through the code, see which instruction currently being executed, last executed instruction and maybe even a roll back feature
 
-other components that rely on the timer are the PPU, APU and timer
+for now i can get basic debug menu up and running
+the game window will be in the middle and then i can have debug info on the left and right side
 
-goals
-get the cpu instruction test rom loaded and running
-need to at least know that i can fetch decode and execute instructions and know
+debug menu:
+- start with showing a rectanlge containing the currently executed instruction
+- also store a buffer with last x executed instructions
