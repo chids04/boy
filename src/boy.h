@@ -27,7 +27,6 @@ void step_boy(BOY *boy);
 
 void check_interrupts(BOY *boy);
 void handle_dma(BOY *boy);
-void handle_ppu(BOY *boy);
 void log_state(BOY *boy);
 void close_log_file(void);
 void handle_interrupts(BOY *boy, uint8_t interrupts);

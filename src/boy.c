@@ -22,14 +22,11 @@ void load_rom(BOY *boy, uint8_t *rom) { boy->mmu = *init_mmu(rom); }
 
 void init_components(BOY *boy) {
   uint8_t header_checksum = rom_header_checksum(&boy->mmu);
-
   init_cpu(&boy->cpu, header_checksum);
-
+  init_ppu(&boy->ppu);
   boy->timers.mmu = &boy->mmu;
 
   atexit(close_log_file);
-
-
 }
 
 // called every M cycle ( 4 T Cycles )
@@ -37,7 +34,7 @@ void tick(BOY *boy, int cycles) {
   increment_timers(&boy->timers, cycles);
   // also tick the ppu here too
   handle_dma(boy);
-  handle_ppu(boy);
+  handle_ppu(boy, cycles);
 };
 
 void handle_dma(BOY *boy) {

@@ -13,11 +13,13 @@ typedef enum PPU_MODE {
 struct PPU {
   SPRITE* sprites;
   PPU_MODE mode;
+  int cycle;
 
   uint8_t oam_offset;
 };
 
-PPU ppu_init();
+void init_ppu(PPU *ppu);
 
-void handle_ppu(BOY *boy);
+void handle_ppu(BOY *boy, int cycles);
 void handle_oam_scan(BOY *boy);
+void set_mode(PPU *ppu);

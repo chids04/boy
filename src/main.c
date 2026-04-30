@@ -10,6 +10,10 @@
 #include "raygui.h"
 
 int main() {
+  test_ppu_transitions();
+
+  return 0;
+
   FILE *f = fopen("./cpu_instrs/cpu_instrs.gb", "r");
 
   if (f == NULL) {

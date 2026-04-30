@@ -131,3 +131,48 @@ void test_dma_transfer() {
 
   printf("DMA transfer test passed\n");
 }
+
+void test_ppu_transitions() {
+  BOY *boy = test_init();
+  if (boy == NULL) {
+    return;
+  }
+
+  assert(boy->ppu.mode == PPU_MODE_2);
+
+  // 79 T cycles
+  for (int i = 0; i < 19; i++) {
+    tick(boy, 1);
+  }
+
+  // assert still in oam search mode
+  assert(boy->ppu.mode == PPU_MODE_2);
+
+  tick(boy, 1);
+
+  assert(boy->ppu.mode == PPU_MODE_3);
+
+  // 171 T cycles
+  for(int i = 0; i < 42; i++) {
+    tick(boy, 1);
+  }
+
+  assert(boy->ppu.mode == PPU_MODE_3);
+
+  tick(boy, 1);
+
+  assert(boy->ppu.mode == PPU_MODE_0);
+
+  for(int i = 0; i < 21; i++) {
+    tick(boy, 1);
+  }
+
+  assert(boy->ppu.mode == PPU_MODE_0);
+
+  tick(boy, 1);
+
+  assert(boy->ppu.mode == PPU_MODE_1);
+
+  printf("PPU state transition test passed\n");
+
+}
