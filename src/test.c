@@ -174,5 +174,4 @@ void test_ppu_transitions() {
   assert(boy->ppu.mode == PPU_MODE_1);
 
   printf("PPU state transition test passed\n");
-
 }

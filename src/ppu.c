@@ -1,5 +1,6 @@
 #include "ppu.h"
 #include "boy.h"
+#include "common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,5 +51,29 @@ void handle_oam_scan(BOY *boy){
   SPRITE *entry1 = handle_oam_read(&boy->mmu, offset1);
   SPRITE *entry2 = handle_oam_read(&boy->mmu, offset2);
 
+  if(to_sprite_buffer(boy, entry1)) {
+    size_t offset = boy->ppu.sprite_buffer_offset * sizeof(SPRITE);
+    memcpy(boy->ppu.sprite_buffer + offset, entry1, sizeof(SPRITE));
+    boy->ppu.sprite_buffer_offset++;
+  }
 
+  if(to_sprite_buffer(boy, entry2)) {
+    size_t offset = boy->ppu.sprite_buffer_offset * sizeof(SPRITE);
+    memcpy(boy->ppu.sprite_buffer + offset, entry2, sizeof(SPRITE));
+    boy->ppu.sprite_buffer_offset++;
+  }
+
+}
+
+bool to_sprite_buffer(BOY *boy, SPRITE *sprite){
+  if(
+    sprite->x > 0 &&
+    sprite->y <= boy->mmu.LY + 16 &&
+    sprite->y <=boy->mmu.LY + 16 + sprite_height(boy, sprite) &&
+    boy->ppu.sprite_buffer_offset < MAX_SPRITES
+  ) {
+      return true;
+  }
+
+  return false;
 }
