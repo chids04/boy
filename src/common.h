@@ -10,6 +10,7 @@ typedef struct MMU MMU;
 typedef struct PPU PPU;
 typedef struct TIMERS TIMERS;
 typedef struct PAD PAD;
+typedef struct SPRITE SPRITE;
 
 typedef enum {
     GB_OK = 0,

@@ -89,6 +89,13 @@ enum ROM_SIZE {
   ROM_1_5MB,
 };
 
+struct SPRITE {
+  uint8_t y;
+  uint8_t x;
+  uint8_t tile;
+  uint8_t flags;
+};
+
 struct MMU {
   uint8_t memory[0x10000]; // 0xFFFF is 65535, so 0x10000 bytes for a full 64KB
                            // address space
@@ -97,14 +104,16 @@ struct MMU {
   uint8_t wram[WRAM_SIZE];
   uint8_t vram[VRAM_SIZE];
   uint8_t hram[HRAM_SIZE];
-  uint8_t oam[OAM_SIZE];
+  SPRITE oam[40];
 
   struct mbc mbc;
   enum RAM_SIZE ram_size;
   enum ROM_SIZE rom_size;
+
   bool dma_transfer;
   bool enabling_dma;
-  int dma_progress;
+  bool dma_delay;
+  uint8_t dma_progress;
   uint16_t dma_src;
 
   // interrupt registers
@@ -157,7 +166,9 @@ uint8_t handle_mbc1_read(MMU *mmu, uint16_t address);
 void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data);
 
 uint8_t handle_dma_read(BOY *boy, uint16_t address);
-void handle_dma_write(MMU *mmu, int offset, uint8_t data);
+void handle_dma_write(MMU *mmu, uint8_t offset, uint8_t data);
+
+SPRITE *handle_oam_read(MMU *mmu, uint8_t offset);
 
 int ram_size_bytes(enum RAM_SIZE size);
 

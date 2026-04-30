@@ -4,14 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "raylib.h"
+#include "test.h"
 
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
 int main() {
-  // read the rom, start cpu and start decoding
-
-
   FILE *f = fopen("./cpu_instrs/cpu_instrs.gb", "r");
 
   if (f == NULL) {

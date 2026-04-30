@@ -6,6 +6,7 @@
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 
@@ -31,20 +32,28 @@ void init_components(BOY *boy) {
 
 }
 
+// called every M cycle ( 4 T Cycles )
 void tick(BOY *boy, int cycles) {
   increment_timers(&boy->timers, cycles);
   // also tick the ppu here too
   handle_dma(boy);
+  handle_ppu(boy);
 };
 
 void handle_dma(BOY *boy) {
-  // transfer one byte at a time
+  // transfer one byte every M cycle (4 T cycles)
 
   // one m cycle delay
   if(boy->mmu.enabling_dma) {
+    boy->mmu.dma_delay = true;
+    boy->mmu.enabling_dma = false;
+    return;
+  }
+
+  if(boy->mmu.dma_delay) {
     boy->mmu.dma_transfer = true;
     boy->mmu.dma_progress = 0;
-    boy->mmu.enabling_dma = false;
+    boy->mmu.dma_delay = false;
     return;
   }
 
@@ -52,7 +61,8 @@ void handle_dma(BOY *boy) {
     if(boy->mmu.dma_progress < 160) {
       uint16_t src = boy->mmu.dma_src + boy->mmu.dma_progress;
       uint8_t data = handle_dma_read(boy, src);
-      handle_dma_write(&boy->mmu, boy->mmu.dma_progress, data);
+
+      memcpy(&((uint8_t*)boy->mmu.oam)[boy->mmu.dma_progress], &data, 8);
       boy->mmu.dma_progress++;
     }
     else if(boy->mmu.dma_progress == 160) {

@@ -18,6 +18,10 @@ add_library(GbCore
     src/boy.c
     src/log.h
     src/log.c
+    src/ppu.h
+    src/ppu.c
+    src/test.h
+    src/test.c
 )
 
 

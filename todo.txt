@@ -1,16 +1,3 @@
-got most of the cpu working, moving onto the ppu now
+think about dma handling
 
-i want the core library to contain the main emulation
-and then a seperate gui libary that is used for displaying
-but i dont really want to mix the gui code into the core emulation code
-
-maybe two seperate libraries, i already have the core lib, this can just output a buffer containg draw commands for raylib to follow
-
-also want to build a debugger so that i can step through the code, see which instruction currently being executed, last executed instruction and maybe even a roll back feature
-
-for now i can get basic debug menu up and running
-the game window will be in the middle and then i can have debug info on the left and right side
-
-debug menu:
-- start with showing a rectanlge containing the currently executed instruction
-- also store a buffer with last x executed instructions
+tick happens AFTER the mem read

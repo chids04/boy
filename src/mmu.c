@@ -5,11 +5,16 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 MMU *init_mmu(uint8_t *rom) {
   MMU *mmu = malloc(sizeof(MMU));
   mmu->rom = rom;
+
+  memset(mmu->oam, 0, sizeof(mmu->oam));
   mmu->dma_transfer = false;
+  mmu->enabling_dma = false;
+  mmu->dma_delay = false;
 
   mmu->mbc.mbc_type = mmu->rom[0x0147];
   init_mbc(mmu);
@@ -19,6 +24,7 @@ MMU *init_mmu(uint8_t *rom) {
 
   mmu->rom = rom;
   mmu->sram = malloc(ram_size_bytes(mmu->ram_size));
+  memset(mmu->sram, 0, ram_size_bytes(mmu->ram_size));
 
   init_hardware_registers(mmu);
 
@@ -157,7 +163,7 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
     // technically use of this area is prohibted so no need to emulate
   } else if (address >= OAM_START && address <= OAM_END) {
 
-    boy->mmu.oam[address - OAM_START] = data;
+    ((uint8_t *)boy->mmu.oam)[address - OAM_START] = data;
 
   } else if (address >= ECHO_RAM_START && address <= ECHO_RAM_END) {
     // use of this area prohibited
@@ -381,16 +387,12 @@ void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
               address);
   } else if (address >= 0xFF40 && address <= 0xFF4B) {
     // handle lcd control, status, position, scrolling and paletters
+    log_warn("only dma supported for address 0x%04X", address);
 
-    log_error("LCD control handler for address 0x%04X not implemented",
-              address);
-  } else if (address == 0xFF46) {
-    // handle OAM DMA transfer here
-    log_error("OAM DMA transfer handler for address 0x%04X not implemented",
-              address);
-
-    boy->mmu.enabling_dma = true;
-    boy->mmu.dma_src = (data & 0xDF) << 8;
+    if(address == 0xFF46) {
+      boy->mmu.enabling_dma = true;
+      boy->mmu.dma_src = (data & 0xDF) << 8;
+    }
 
   }
 }
@@ -462,10 +464,11 @@ void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data) {
 uint8_t handle_dma_read(BOY *boy, uint16_t address) {
   // this is the same as read_byte() but does not tick the timers and is only for the mem sections that dma can read from
   //
+
+  // default for out of memory reads is 0xFF
   uint8_t data = 0xFF;
   if (address >= ROM_BANK0_START && address <= ROM_BANK1_END) {
     // handle cartridge read
-    // may need to tick timers inside the mbc to handle the timing differences
     data = handle_cart_read(&boy->mmu, address);
   } else if (address >= VRAM_START && address <= VRAM_END) {
     log_warn("VRAM handler for address 0x%04X not implemented\n", address);
@@ -477,16 +480,31 @@ uint8_t handle_dma_read(BOY *boy, uint16_t address) {
 
   } else if (address >= WRAM_START && address <= WRAM_END) {
     data = boy->mmu.wram[address - WRAM_START];
+  }
 
   return data;
 }
 
-void handle_dma_write(MMU *mmu, int offset, uint8_t data) {
-  if (offset < 0 || offset > 0x9F) return;
-  mmu->oam[OAM_START + offset] = data;
 
+void handle_dma_write(MMU *mmu, uint8_t offset, uint8_t data) {
+  if (offset < 0 || offset > 0x9F) {
+    log_error("out of range dma access");
+    return;
+  };
+
+
+
+  memset(&mmu->oam[offset], data, 8);
 }
 
+SPRITE *handle_oam_read(MMU *mmu, uint8_t offset) {
+  if (offset >= OAM_SIZE) {
+    log_error("out of range oam access");
+    return 0;
+  }
+
+  return &mmu->oam[offset];
+}
 
 
 int get_zero_bank_num(MMU *mmu) {
