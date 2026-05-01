@@ -1,5 +1,9 @@
 # build directories
 build/
+*.log
+*.pdf
+*.zip
+*.gb
 
 .cache/
 test/state.log
