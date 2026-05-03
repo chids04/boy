@@ -10,7 +10,8 @@
 #include "raygui.h"
 
 int main() {
-  test_ppu_transitions();
+  //test_ppu_transitions();
+  test_ppu_single_oam_scan();
 
   return 0;
 

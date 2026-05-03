@@ -1,6 +1,7 @@
 #include "ppu.h"
 #include "boy.h"
 #include "common.h"
+#include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,8 +10,8 @@ void init_ppu(PPU *ppu) {
   ppu->mode = PPU_MODE_2;
   ppu->cycle = 0;
   ppu->oam_offset = 0;
-  ppu->sprites = malloc(10 * sizeof(SPRITE));
-  memset(ppu->sprites, 0, 10 * sizeof(SPRITE));
+  ppu->sprite_buffer = calloc(10, sizeof(SPRITE));
+  ppu->sprite_buffer_offset = 0;
 }
 
 // called every M cycle ( 4 T Cycles )
@@ -52,14 +53,12 @@ void handle_oam_scan(BOY *boy){
   SPRITE *entry2 = handle_oam_read(&boy->mmu, offset2);
 
   if(to_sprite_buffer(boy, entry1)) {
-    size_t offset = boy->ppu.sprite_buffer_offset * sizeof(SPRITE);
-    memcpy(boy->ppu.sprite_buffer + offset, entry1, sizeof(SPRITE));
+    boy->ppu.sprite_buffer[boy->ppu.sprite_buffer_offset] = *entry1;
     boy->ppu.sprite_buffer_offset++;
   }
 
   if(to_sprite_buffer(boy, entry2)) {
-    size_t offset = boy->ppu.sprite_buffer_offset * sizeof(SPRITE);
-    memcpy(boy->ppu.sprite_buffer + offset, entry2, sizeof(SPRITE));
+    boy->ppu.sprite_buffer[boy->ppu.sprite_buffer_offset] = *entry2;
     boy->ppu.sprite_buffer_offset++;
   }
 
@@ -69,11 +68,19 @@ bool to_sprite_buffer(BOY *boy, SPRITE *sprite){
   if(
     sprite->x > 0 &&
     sprite->y <= boy->mmu.LY + 16 &&
-    sprite->y <=boy->mmu.LY + 16 + sprite_height(boy, sprite) &&
+    sprite->y + sprite_height(&boy->mmu) > boy->mmu.LY + 16 &&
     boy->ppu.sprite_buffer_offset < MAX_SPRITES
   ) {
       return true;
   }
 
   return false;
+}
+
+uint8_t sprite_height(MMU *mmu) {
+  if(get_bit(mmu->LCDC, 2) == 0) {
+    return 8;
+  }
+
+  return 16;
 }

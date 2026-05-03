@@ -7,3 +7,4 @@ void generate_test_sprites(SPRITE *oam);
 void test_dma_transfer();
 void test_dma_timing();
 void test_ppu_transitions();
+void test_ppu_single_oam_scan();

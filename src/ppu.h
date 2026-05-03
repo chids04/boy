@@ -22,8 +22,8 @@ struct PPU {
 };
 
 void init_ppu(PPU *ppu);
-
 void handle_ppu(BOY *boy, int cycles);
 void handle_oam_scan(BOY *boy);
 void set_mode(PPU *ppu);
 bool to_sprite_buffer(BOY *boy, SPRITE *sprite);
+uint8_t sprite_height(MMU *mmu);

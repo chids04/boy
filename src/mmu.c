@@ -58,6 +58,9 @@ void init_hardware_registers(MMU *mmu) {
 
   mmu->IF = 0xE1;
   mmu->IE = 0x00;
+
+  mmu->LY = 0x00;
+  mmu->LCDC = 0x91;
 }
 
 uint8_t rom_header_checksum(MMU *mmu) {

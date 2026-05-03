@@ -134,6 +134,9 @@ struct MMU {
   uint8_t TIMA;
   uint8_t TMA;
   uint8_t TAC;
+
+  uint8_t LY;
+  uint8_t LCDC;
 };
 
 MMU* init_mmu(uint8_t *rom);

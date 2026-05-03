@@ -175,3 +175,30 @@ void test_ppu_transitions() {
 
   printf("PPU state transition test passed\n");
 }
+
+void test_ppu_single_oam_scan() {
+  BOY *boy = test_init();
+  if (boy == NULL) {
+    return;
+  }
+
+  SPRITE sprite = { .y = 10, .x = 20, .tile = 0 , .flags = 0 };
+  SPRITE sprite2 = { .y = 11, .x = 30, .tile = 1 , .flags = 2 };
+
+  boy->mmu.LY = 1;
+
+  boy->mmu.oam[0] = sprite;
+  boy->mmu.oam[1] = sprite2;
+
+  handle_oam_scan(boy);
+
+  assert(boy->ppu.sprite_buffer[0].y == sprite.y);
+  assert(boy->ppu.sprite_buffer[0].x == sprite.x);
+  assert(boy->ppu.sprite_buffer[0].tile == sprite.tile);
+  assert(boy->ppu.sprite_buffer[0].flags == sprite.flags);
+
+  assert(boy->ppu.sprite_buffer[1].y == sprite2.y);
+  assert(boy->ppu.sprite_buffer[1].x == sprite2.x);
+  assert(boy->ppu.sprite_buffer[1].tile == sprite2.tile);
+  assert(boy->ppu.sprite_buffer[1].flags == sprite2.flags);
+}
