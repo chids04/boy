@@ -1,6 +1,7 @@
 #include "boy.h"
 #include "common.h"
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "raylib.h"
@@ -11,7 +12,10 @@
 
 int main() {
   //test_ppu_transitions();
-  test_ppu_single_oam_scan();
+
+  return 0;
+
+  test_ppu();
 
   return 0;
 

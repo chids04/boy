@@ -56,14 +56,14 @@ bool condition(CPU *cpu, uint8_t idx) {
 }
 
 uint8_t read_imm8(BOY *boy) {
-  uint8_t byte = read_byte(boy, boy->cpu.PC++);
+  uint8_t byte = read_byte_tick(boy, boy->cpu.PC++);
 
   return byte;
 }
 
 uint16_t read_imm16(BOY *boy) {
-  uint8_t lsb = read_byte(boy, boy->cpu.PC++);
-  uint8_t msb = read_byte(boy, boy->cpu.PC++);
+  uint8_t lsb = read_byte_tick(boy, boy->cpu.PC++);
+  uint8_t msb = read_byte_tick(boy, boy->cpu.PC++);
 
   return (msb << 8) | lsb;
 }
@@ -85,7 +85,7 @@ uint8_t read_r8(BOY *boy, uint8_t reg) {
     return boy->cpu.L;
   case 6: {
     uint16_t hl = read_r16(&boy->cpu, 2);
-    return read_byte(boy, hl);
+    return read_byte_tick(boy, hl);
   }
   case 7:
     return boy->cpu.A;
@@ -157,14 +157,14 @@ void write_r16mem(BOY *boy, uint8_t reg, uint8_t data) {
 uint8_t read_r16mem(BOY *boy, uint8_t reg) {
   switch (reg) {
   case 0:
-    return read_byte(boy, (boy->cpu.B << 8) | boy->cpu.C);
+    return read_byte_tick(boy, (boy->cpu.B << 8) | boy->cpu.C);
   case 1:
-    return read_byte(boy, (boy->cpu.D << 8) | boy->cpu.E);
+    return read_byte_tick(boy, (boy->cpu.D << 8) | boy->cpu.E);
 
   case 2:
   case 3: {
     uint16_t hl = (boy->cpu.H << 8) | boy->cpu.L;
-    uint8_t data = read_byte(boy, hl);
+    uint8_t data = read_byte_tick(boy, hl);
 
     if (reg == 2) {
       hl += 1;

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// returns specified bit in bitfield
 static inline uint8_t get_bit(uint16_t bytes, int n) {
   return (bytes >> n) & 1;
 }

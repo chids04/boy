@@ -135,15 +135,25 @@ struct MMU {
   uint8_t TMA;
   uint8_t TAC;
 
+  // ppu registers
+  uint8_t STAT;
+  uint8_t SCX;
+  uint8_t SCY;
   uint8_t LY;
   uint8_t LCDC;
+  uint8_t BGP;
+  uint8_t OBP0;
+  uint8_t OBP1;
+  uint8_t WX;
+  uint8_t WY;
+
+
 };
 
 MMU* init_mmu(uint8_t *rom);
 void init_mbc(MMU *mmu);
 void init_hardware_registers(MMU *mmu);
 uint8_t rom_header_checksum(MMU *mmu);
-struct mbc get_mbc(MMU *mmu);
 
 void handle_cart_write(MMU *mmu, uint16_t address, uint8_t data);
 uint8_t handle_cart_read(MMU *mmu, uint16_t address);
@@ -152,6 +162,7 @@ int get_zero_bank_num(MMU *mmu);
 int get_high_bank_num(MMU *mmu);
 
 uint8_t read_byte(BOY *boy, uint16_t address);
+uint8_t read_byte_tick(BOY *boy, uint16_t address);
 uint8_t read_byte_no_tick(BOY *boy, uint16_t address);
 void write_byte(BOY *boy, uint16_t address, uint8_t data);
 
