@@ -54,6 +54,7 @@ struct PPU {
       uint8_t tile_low;
       uint8_t tile_high;
       uint16_t tile_address;
+      uint8_t scx_delay;
     } PPU_DRAW;
   } ppu_state;
 
@@ -94,5 +95,5 @@ void mode3_init(PPU *ppu);
 void mode_3_tile_num(BOY *boy);
 void mode_3_tile_low(BOY *boy);
 void mode_3_tile_high(BOY *boy);
-void mode_3_tile_high_fifo(BOY *boy);
+void mode_3_fifo(BOY *boy);
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_num);

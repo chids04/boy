@@ -217,7 +217,7 @@ void mode_3_tile_high(BOY *boy) {
   }
 }
 
-void mode_3_tile_high_fifo(BOY *boy) {
+void mode_3_fifo(BOY *boy) {
   if (ppu_queue_is_empty(&boy->ppu.background_fifo)) {
     return;
   }
