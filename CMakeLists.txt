@@ -22,6 +22,8 @@ add_library(GbCore
     src/ppu.c
     src/test.h
     src/test.c
+    src/ppu_queue.h
+    src/ppu_queue.c
 )
 
 

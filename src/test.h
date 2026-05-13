@@ -25,3 +25,10 @@ void test_sprites_x_zero_filtered();
 
 // write test the verifies window is fetched when it should be
 void test_fetch_window();
+
+
+
+// queue tests
+void test_queue_full();
+void test_queue_order();
+void test_queue_dequeue_enqueue();

@@ -2,6 +2,7 @@
 #include "cpu.h"
 #include "log.h"
 #include "mmu.h"
+#include "ppu.h"
 #include "timer.h"
 #include "utils.h"
 #include <stdio.h>
@@ -34,7 +35,10 @@ void tick(BOY *boy, int cycles) {
   increment_timers(&boy->timers, cycles);
   // also tick the ppu here too
   handle_dma(boy);
-  handle_ppu(boy, cycles);
+
+  for(int i=0; i<4; i++) {
+    handle_ppu(boy, 1);
+  }
 };
 
 void handle_dma(BOY *boy) {

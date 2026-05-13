@@ -2,6 +2,17 @@
 
 this is a learning exercise for me to learn the inner workings of a computer
 
+## current work
+* implementing a FIFO based PPU renderer
+* finishing mode 3 implementation for background and window tiles
+
+## todo
+* handle transition from fetching bg to win tiles
+* set up raylib to start displaying stuff in lcd (write to a buffer that gets blitted to screen once per frame)
+* handle timing and state transitions
+* handle transition to fetching sprite pixels
+* write tests
+
 ## progress
 * currently passes 11/11 of the [blargg](https://github.com/retrio/gb-test-roms) cpu test roms
 * for testing each opcode, [gb doctor](https://github.com/robert/gameboy-doctor) was used to compare the cpu state after each cycle with the state of a working emulator

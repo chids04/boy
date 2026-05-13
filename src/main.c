@@ -13,9 +13,9 @@
 int main() {
   //test_ppu_transitions();
 
-  return 0;
 
-  test_ppu();
+  test_queue_full();
+  test_queue_order();
 
   return 0;
 

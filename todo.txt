@@ -1,3 +1,16 @@
 ### working on the ppu
 
 handled oam scan, now implementing the fetching of tilemaps
+
+background pixel fetching and pushing to lcd happen at the exact same time <- my state transitions dont account for this
+ - push to lcd state and pixel fetch need to be the same
+- could also add a secondary sub-m cycle timer that can tick the timers incrementally, this might desync everything tho idk
+
+for now we can implement the queue for the background fifo
+im thinking just a simple circular buffer array
+
+we have a concrete plan now
+ppu is ticked 4 times in side tick()
+
+we are working on the background fifo right now,
+also most done with this, just need to sort out state transitions after this.

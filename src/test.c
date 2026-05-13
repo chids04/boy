@@ -1,11 +1,13 @@
 #include "test.h"
 #include "boy.h"
 #include "common.h"
+#include "ppu.h"
+#include "ppu_queue.h"
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
-BOY* test_init() {
+BOY *test_init() {
   FILE *f = fopen("./cpu_instrs/cpu_instrs.gb", "r");
 
   if (f == NULL) {
@@ -50,13 +52,12 @@ BOY* test_init() {
 
 void generate_test_sprites(SPRITE *oam) {
   for (int i = 0; i < 40; i++) {
-      oam[i].y = i;
-      oam[i].x = i + 40;
-      oam[i].tile = (i * 2) % 256;
-      oam[i].flags = i % 4;
+    oam[i].y = i;
+    oam[i].x = i + 40;
+    oam[i].tile = (i * 2) % 256;
+    oam[i].flags = i % 4;
   }
 }
-
 
 void test_dma_timing() {
   BOY *boy = test_init();
@@ -65,7 +66,7 @@ void test_dma_timing() {
   }
 
   // copy sprite into work ram
-  SPRITE sprite = { .y = 10, .x = 10, .tile = 0, .flags = 0 };
+  SPRITE sprite = {.y = 10, .x = 10, .tile = 0, .flags = 0};
   memcpy(&boy->mmu.wram[0], &sprite, sizeof(SPRITE));
 
   // write to mem location to start dma from beginning of wram
@@ -77,7 +78,7 @@ void test_dma_timing() {
   assert(boy->mmu.dma_delay == true);
 
   // assert first byte in work ram is first byte of sprite
-  assert(((uint8_t*)boy->mmu.wram)[0] == 10);
+  assert(((uint8_t *)boy->mmu.wram)[0] == 10);
 
   // dma delay m cycle, dma gets enabled at the end
   tick(boy, 1);
@@ -85,17 +86,15 @@ void test_dma_timing() {
   assert(boy->mmu.dma_delay == false);
   assert(boy->mmu.enabling_dma == false);
   assert(boy->mmu.dma_progress == 0);
-  assert(((uint8_t*)boy->mmu.oam)[0] == 0);
-
+  assert(((uint8_t *)boy->mmu.oam)[0] == 0);
 
   tick(boy, 1);
   assert(boy->mmu.dma_transfer == true);
   assert(boy->mmu.dma_progress == 1);
-  assert(((uint8_t*)boy->mmu.oam)[0] == 10);
+  assert(((uint8_t *)boy->mmu.oam)[0] == 10);
 
   printf("DMA timing test passed\n");
 }
-
 
 void test_dma_transfer() {
   BOY *boy = test_init();
@@ -107,26 +106,27 @@ void test_dma_transfer() {
 
   generate_test_sprites(expected);
 
-  memcpy(&boy->mmu.wram[0], (uint8_t*)expected, 160);
+  memcpy(&boy->mmu.wram[0], (uint8_t *)expected, 160);
 
   write_byte(boy, 0xFF46, 0xC0);
 
   // tick to skip delay
   tick(boy, 1);
 
-  // i cancel dma on the 160th cycle, maybe it needs to be cancelled at end of 159th?
+  // i cancel dma on the 160th cycle, maybe it needs to be cancelled at end of
+  // 159th?
   for (int i = 0; i <= 160; i++) {
-      tick(boy, 1);
+    tick(boy, 1);
   }
 
   // ensure dma ended
   assert(boy->mmu.dma_transfer == false);
 
   for (int i = 0; i < 40; i++) {
-      assert(boy->mmu.oam[i].y == expected[i].y);
-      assert(boy->mmu.oam[i].x == expected[i].x);
-      assert(boy->mmu.oam[i].tile == expected[i].tile);
-      assert(boy->mmu.oam[i].flags == expected[i].flags);
+    assert(boy->mmu.oam[i].y == expected[i].y);
+    assert(boy->mmu.oam[i].x == expected[i].x);
+    assert(boy->mmu.oam[i].tile == expected[i].tile);
+    assert(boy->mmu.oam[i].flags == expected[i].flags);
   }
 
   printf("DMA transfer test passed\n");
@@ -146,7 +146,7 @@ void test_ppu_transitions() {
     return;
   }
 
-  assert(boy->ppu.mode == PPU_MODE_2);
+  assert(boy->ppu.ppu_mode == PPU_MODE_2);
 
   // 79 T cycles
   for (int i = 0; i < 19; i++) {
@@ -154,32 +154,32 @@ void test_ppu_transitions() {
   }
 
   // assert still in oam search mode
-  assert(boy->ppu.mode == PPU_MODE_2);
+  assert(boy->ppu.ppu_mode == PPU_MODE_2);
 
   tick(boy, 1);
 
-  assert(boy->ppu.mode == PPU_MODE_3);
+  assert(boy->ppu.ppu_mode == PPU_MODE_3);
 
   // 171 T cycles
-  for(int i = 0; i < 42; i++) {
+  for (int i = 0; i < 42; i++) {
     tick(boy, 1);
   }
 
-  assert(boy->ppu.mode == PPU_MODE_3);
+  assert(boy->ppu.ppu_mode == PPU_MODE_3);
 
   tick(boy, 1);
 
-  assert(boy->ppu.mode == PPU_MODE_0);
+  assert(boy->ppu.ppu_mode == PPU_MODE_0);
 
-  for(int i = 0; i < 21; i++) {
+  for (int i = 0; i < 21; i++) {
     tick(boy, 1);
   }
 
-  assert(boy->ppu.mode == PPU_MODE_0);
+  assert(boy->ppu.ppu_mode == PPU_MODE_0);
 
   tick(boy, 1);
 
-  assert(boy->ppu.mode == PPU_MODE_1);
+  assert(boy->ppu.ppu_mode == PPU_MODE_1);
 
   printf("PPU state transition test passed\n");
 }
@@ -190,8 +190,8 @@ void test_ppu_single_oam_scan() {
     return;
   }
 
-  SPRITE sprite = { .y = 10, .x = 20, .tile = 0 , .flags = 0 };
-  SPRITE sprite2 = { .y = 11, .x = 30, .tile = 1 , .flags = 2 };
+  SPRITE sprite = {.y = 10, .x = 20, .tile = 0, .flags = 0};
+  SPRITE sprite2 = {.y = 11, .x = 30, .tile = 1, .flags = 2};
 
   boy->mmu.LY = 1;
 
@@ -211,7 +211,8 @@ void test_ppu_single_oam_scan() {
   assert(boy->ppu.sprite_buffer[1].flags == sprite2.flags);
 }
 
-// Helper: scan all 40 OAM entries (20 calls of handle_oam_scan, each scans 2 entries)
+// Helper: scan all 40 OAM entries (20 calls of handle_oam_scan, each scans 2
+// entries)
 void scan_full_oam(BOY *boy) {
   for (int i = 0; i < 20; i++) {
     handle_oam_scan(boy);
@@ -227,12 +228,12 @@ void test_sprites_x_zero_filtered() {
 
   // Set up conditions for sprites to be visible by Y
   boy->mmu.LY = 20;
-  boy->mmu.LCDC = 0x4;  // 8x8 sprite mode
+  boy->mmu.LCDC = 0x4; // 8x8 sprite mode
 
   // Create 10 sprites all with x=0 (off-screen horizontally)
   for (int i = 0; i < 10; i++) {
     boy->mmu.oam[i].x = 0;
-    boy->mmu.oam[i].y = 25;  // In valid Y range for LY=20
+    boy->mmu.oam[i].y = 25; // In valid Y range for LY=20
     boy->mmu.oam[i].tile = i;
     boy->mmu.oam[i].flags = 0;
   }
@@ -252,12 +253,12 @@ void test_sprites_oam_overflow() {
 
   // Set up conditions
   boy->mmu.LY = 20;
-  boy->mmu.LCDC = 0x4;  // 8x8 sprite mode
+  boy->mmu.LCDC = 0x4; // 8x8 sprite mode
 
   // fill OAM with 40 valid sprites
   for (int i = 0; i < 40; i++) {
-    boy->mmu.oam[i].x = 10 + i;  // all have x > 0
-    boy->mmu.oam[i].y = 25;      // all in valid Y range
+    boy->mmu.oam[i].x = 10 + i; // all have x > 0
+    boy->mmu.oam[i].y = 25;     // all in valid Y range
     boy->mmu.oam[i].tile = i;
     boy->mmu.oam[i].flags = 0;
   }
@@ -284,7 +285,7 @@ void test_sprites_mixed_validity() {
 
   // set up conditions
   boy->mmu.LY = 20;
-  boy->mmu.LCDC = 0x4;  // 8x8 sprite mode
+  boy->mmu.LCDC = 0x4; // 8x8 sprite mode
 
   // sprite 0: valid (x > 0, y in range)
   boy->mmu.oam[0].x = 10;
@@ -344,6 +345,70 @@ void test_fetch_window() {
    * window tiles are fetched when
     WX is greater than or equal to
    */
+}
 
+void test_queue_full() {
+  PPU_QUEUE q;
 
+  ObjFifoEntry entry1 = {.bg_priority = 1, .color_idx = 01, .pallette = 0};
+  ObjFifoEntry entry2 = {.bg_priority = 2, .color_idx = 00, .pallette = 0};
+  ObjFifoEntry entry3 = {.bg_priority = 3, .color_idx = 10, .pallette = 0};
+  ObjFifoEntry entry4 = {.bg_priority = 4, .color_idx = 11, .pallette = 0};
+
+  ppu_queue_init(&q, 3);
+
+  ppu_queue_enqueue(&q, &entry1);
+  ppu_queue_enqueue(&q, &entry2);
+  ppu_queue_enqueue(&q, &entry3);
+
+  assert(ppu_queue_enqueue(&q, (void *)&entry4) == false);
+}
+
+void test_queue_order() {
+  PPU_QUEUE q;
+
+  ObjFifoEntry entry1 = {.bg_priority = 1, .color_idx = 01, .pallette = 0};
+  ObjFifoEntry entry2 = {.bg_priority = 2, .color_idx = 00, .pallette = 0};
+  ObjFifoEntry entry3 = {.bg_priority = 3, .color_idx = 10, .pallette = 0};
+
+  ppu_queue_init(&q, 3);
+
+  ppu_queue_enqueue(&q, &entry1);
+  ppu_queue_enqueue(&q, &entry2);
+  ppu_queue_enqueue(&q, &entry3);
+
+  ObjFifoEntry *dequeue1 = ppu_queue_dequeue(&q);
+  ObjFifoEntry *dequeue2 = ppu_queue_dequeue(&q);
+  ObjFifoEntry *dequeue3 = ppu_queue_dequeue(&q);
+
+  assert(dequeue1->bg_priority == 1 && dequeue1->color_idx == 01 && dequeue1->pallette == 0);
+  assert(dequeue2->bg_priority == 2 && dequeue2->color_idx == 00 && dequeue2->pallette == 0);
+  assert(dequeue3->bg_priority == 3 && dequeue3->color_idx == 10 && dequeue3->pallette == 0);
+  assert(ppu_queue_is_empty(&q) == true);
+}
+
+void test_queue_dequeue_enqueue(){
+  PPU_QUEUE q;
+
+  ObjFifoEntry entry1 = {.bg_priority = 1, .color_idx = 01, .pallette = 0};
+  ObjFifoEntry entry2 = {.bg_priority = 2, .color_idx = 00, .pallette = 0};
+
+  ppu_queue_init(&q, 2);
+
+  ppu_queue_enqueue(&q, &entry1);
+  ppu_queue_enqueue(&q, &entry2);
+
+  assert(ppu_queue_is_full(&q) == true);
+  ppu_queue_dequeue(&q);
+
+  ObjFifoEntry entry3 = {.bg_priority = 3, .color_idx = 10, .pallette = 0};
+  assert(ppu_queue_enqueue(&q, &entry3) == true);
+
+  ObjFifoEntry *dequeue2 = ppu_queue_dequeue(&q);
+  assert(dequeue2->bg_priority == 2 && dequeue2->color_idx == 00 && dequeue2->pallette == 0);
+
+  ObjFifoEntry *dequeue3 = ppu_queue_dequeue(&q);
+  assert(dequeue3->bg_priority == 3 && dequeue3->color_idx == 10 && dequeue3->pallette == 0);
+
+  assert(ppu_queue_is_empty(&q) == true);
 }
