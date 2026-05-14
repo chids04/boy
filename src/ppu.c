@@ -23,7 +23,12 @@ void init_ppu(PPU *ppu) {
 }
 
 void mode3_init(PPU *ppu) {
-  ppu->ppu_state.PPU_DRAW.mode_3_state = MODE_3_TILE_NUM_TILE_LOW;
+  ppu->ppu_state.PPU_DRAW.mode_3_state = MODE_3_TILE_LOW;
+  ppu->ppu_state.PPU_DRAW.tile_low = 0;
+  ppu->ppu_state.PPU_DRAW.tile_high = 0;
+  ppu->ppu_state.PPU_DRAW.tile_address = 0;
+  ppu->ppu_state.PPU_DRAW.scx_delay = 0;
+  ppu->ppu_state.PPU_DRAW.dot_delay = 0;
 }
 
 // called every M cycle ( 4 T Cycles )
@@ -34,6 +39,9 @@ void handle_ppu(BOY *boy, int dots) {
     handle_oam_scan(boy);
   } else if (boy->ppu.ppu_mode == PPU_MODE_3) {
     handle_ppu_draw(boy);
+  }
+  else if(boy->ppu.ppu_mode == PPU_MODE_0){
+
   }
 
   set_mode(&boy->ppu);
@@ -46,12 +54,11 @@ void set_mode(PPU *ppu) {
   if (ppu->ppu_mode == PPU_MODE_2 && ppu->dots == 80) {
     ppu->ppu_mode = PPU_MODE_3;
     ppu->dots = 0;
-  } else if (ppu->ppu_mode == PPU_MODE_3 && ppu->dots == 172) {
+  } else if ( (ppu->ppu_mode == PPU_MODE_3) && (ppu->dots == 172 + ppu->ppu_state.PPU_DRAW.dot_delay) ) {
     ppu->ppu_mode = PPU_MODE_0;
     ppu->dots = 0;
 
-    // off by one cycle, since 87 not directly divisble by 4
-  } else if (ppu->ppu_mode == PPU_MODE_0 && ppu->dots == 87) {
+  } else if ( (ppu->ppu_mode == PPU_MODE_0)  && (ppu->dots == 87 - ppu->ppu_state.PPU_DRAW.dot_delay) ) {
     ppu->ppu_mode = PPU_MODE_1;
     ppu->dots = 0;
   }
@@ -96,20 +103,24 @@ uint8_t sprite_height(MMU *mmu) {
 }
 
 void handle_ppu_draw(BOY *boy) {
-  // first get the tile numner of the tile to render
+  // push pixels in queue
+  mode_3_push(boy);
 
   switch (boy->ppu.ppu_state.PPU_DRAW.mode_3_state) {
-  case MODE_3_TILE_NUM_TILE_LOW:
-
-    mode_3_tile_num_tile_low(boy);
-    // update state after
-    boy->ppu.ppu_state.PPU_DRAW.mode_3_state =
-        MODE_3_FETCHER_TILE_HIGH_PUSH_FIFO;
+  case MODE_3_TILE_NUM:
+    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_num(boy);
     break;
 
-  case MODE_3_FETCHER_TILE_HIGH_PUSH_FIFO:
-    mode_3_tile_high_fifo(boy);
-    // handle the state after here
+  case MODE_3_TILE_LOW:
+    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_low(boy);
+    break;
+
+  case MODE_3_TILE_HIGH:
+    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_high(boy);
+    break;
+
+  case MODE_3_FIFO:
+    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_fifo(boy);
     break;
   }
 }
@@ -121,7 +132,7 @@ void check_if_window_next(BOY *boy) {
   }
 }
 
-void mode_3_tile_num(BOY *boy) {
+MODE_3_STATE mode_3_tile_num(BOY *boy) {
   uint16_t BG_MAP_ADDR;
 
   if (get_bit(boy->mmu.LCDC, 3) == 1) {
@@ -148,9 +159,9 @@ void mode_3_tile_num(BOY *boy) {
     // add x offset and scroll ofdset and wrap
     x_offset = (boy->ppu.pixel_fetcher.x_offset + (boy->mmu.SCX / 8)) & 0x1F;
   } else {
-    log_warn("tile x-offset for pixel state %d not implemented",
+    log_error("tile x-offset for pixel state %d not implemented",
              boy->ppu.pixel_fetcher.state);
-    return;
+    return NULL;
   }
 
   uint16_t y_offset;
@@ -161,9 +172,10 @@ void mode_3_tile_num(BOY *boy) {
   } else if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
     y_offset = 32 * (((boy->mmu.LY + boy->mmu.SCY) & 0xFF) / 8);
   } else {
-    log_warn("tile x-offset for pixel state %d not implemented",
+
+    log_error("tile y-offset for objects %d not implemented",
              boy->ppu.pixel_fetcher.state);
-    return;
+    return NULL;
   }
 
   // ensure offset stays within the tilemap region
@@ -171,9 +183,11 @@ void mode_3_tile_num(BOY *boy) {
 
   // get the tile number (x offset) in the tilemap
   boy->ppu.ppu_state.PPU_DRAW.tile_num = read_byte_no_tick(boy, BG_MAP_ADDR);
+
+  return MODE_3_TILE_LOW;
 }
 
-void mode_3_tile_low(BOY *boy) {
+MODE_3_STATE mode_3_tile_low(BOY *boy) {
 
   // if bit 3 of LCDC set then bg map $9C00-$9FFF is used, otherwise it uses the
   // one at $9800-$9BFF.
@@ -192,14 +206,21 @@ void mode_3_tile_low(BOY *boy) {
       read_byte_no_tick(boy, boy->ppu.ppu_state.PPU_DRAW.tile_address);
 }
 
-void mode_3_tile_high(BOY *boy) {
+MODE_3_STATE mode_3_tile_high(BOY *boy) {
   boy->ppu.ppu_state.PPU_DRAW.tile_high =
       read_byte_no_tick(boy, boy->ppu.ppu_state.PPU_DRAW.tile_address + 1);
 
+  return MODE_3_FIFO;
+}
+
+MODE_3_STATE mode_3_fifo(BOY *boy) {
+
+  // not just if its full but if it has less than 8 spaces
+  // change this
   if (ppu_queue_is_full(&boy->ppu.background_fifo)) {
-    // restart mode 3 if it is
-    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = MODE_3_TILE_NUM;
-    return;
+    // restart mode 3 fifo if it is
+    boy->ppu.ppu_state.PPU_DRAW.dot_delay += 1;
+    return MODE_3_FIFO;
   }
 
   for (int i = 0; i < 8; ++i) {
@@ -212,14 +233,17 @@ void mode_3_tile_high(BOY *boy) {
     ppu_queue_enqueue(&boy->ppu.background_fifo, pixel);
   }
 
-  if( (boy->mmu.SCX % 8) != 0 && (boy->ppu.pixel_fetcher.x_offset == 0) ) {
+  if ((boy->mmu.SCX % 8) != 0 && (boy->ppu.pixel_fetcher.x_offset == 0)) {
     boy->ppu.ppu_state.PPU_DRAW.scx_delay = boy->mmu.SCX % 8;
   }
+
+  // go fetch the next tile
+  return MODE_3_TILE_LOW;
 }
 
-void mode_3_fifo(BOY *boy) {
+void mode_3_push(BOY *boy){
   if (ppu_queue_is_empty(&boy->ppu.background_fifo)) {
-    return;
+    return ;
   }
 
   // discard scx % 8 pixel
@@ -227,13 +251,12 @@ void mode_3_fifo(BOY *boy) {
       boy->ppu.pixel_fetcher.x_offset == 0) {
     ppu_queue_dequeue(&boy->ppu.background_fifo);
     boy->ppu.ppu_state.PPU_DRAW.scx_delay--;
+    boy->ppu.ppu_state.PPU_DRAW.dot_delay++;
     return;
   }
 
   // dequeue a background pixel;
   BGWinFifoEntry *entry = ppu_queue_dequeue(&boy->ppu.background_fifo);
-
-  // pass to lcd
 
 }
 

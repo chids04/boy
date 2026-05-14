@@ -20,7 +20,7 @@ typedef enum MODE_3_STATE {
   MODE_3_TILE_NUM,
   MODE_3_TILE_LOW,
   MODE_3_TILE_HIGH,
-  MODE_3_TILE_FIFO,
+  MODE_3_FIFO,
 } MODE_3_STATE;
 
 typedef struct PixelFetcher {
@@ -55,6 +55,7 @@ struct PPU {
       uint8_t tile_high;
       uint16_t tile_address;
       uint8_t scx_delay;
+      uint8_t dot_delay;
     } PPU_DRAW;
   } ppu_state;
 
@@ -92,8 +93,14 @@ bool to_sprite_buffer(BOY *boy, SPRITE *sprite);
 uint8_t sprite_height(MMU *mmu);
 
 void mode3_init(PPU *ppu);
-void mode_3_tile_num(BOY *boy);
-void mode_3_tile_low(BOY *boy);
-void mode_3_tile_high(BOY *boy);
-void mode_3_fifo(BOY *boy);
+
+MODE_3_STATE mode_3_tile_num(BOY *boy);
+
+MODE_3_STATE mode_3_tile_low(BOY *boy);
+
+// returns true if state machine can advance
+MODE_3_STATE mode_3_tile_high(BOY *boy);
+
+MODE_3_STATE mode_3_fifo(BOY *boy);
+void mode_3_push(BOY *boy);
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_num);
