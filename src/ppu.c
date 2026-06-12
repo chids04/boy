@@ -152,11 +152,15 @@ MODE_3_STATE mode_3_tile_num(BOY *boy) {
   uint16_t x_offset;
 
   // add the x-offset
-  if (boy->ppu.pixel_fetcher.state != PixelFetcher_WIN) {
+  if (boy->ppu.pixel_fetcher.state == PixelFetcher_BG) {
     x_offset = (boy->ppu.pixel_fetcher.x_offset + (boy->mmu.SCX / 8)) & 0x1F;
-  } else {
+  } else if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
     // window does not scroll
     x_offset = boy->ppu.pixel_fetcher.x_offset;
+  } else {
+
+    log_error("tile y-offset for objects %d not implemented",
+              boy->ppu.pixel_fetcher.state);
   }
 
   uint16_t y_offset;

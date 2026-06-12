@@ -32,18 +32,18 @@ MMU *init_mmu(uint8_t *rom) {
 }
 
 void init_mbc(MMU *mmu) {
-    switch (mmu->mbc.mbc_type) {
-        case MBC_1:
-        case MBC_1_RAM:
-        case MBC_1_BATTERY_RAM:
-            mmu->mbc.mbc_1.ram_enable = false;
-            mmu->mbc.mbc_1.mode = 0;
-            mmu->mbc.mbc_1.rom_bank_num = 1;
-            mmu->mbc.mbc_1.ram_bank_num = 0;
+  switch (mmu->mbc.mbc_type) {
+  case MBC_1:
+  case MBC_1_RAM:
+  case MBC_1_BATTERY_RAM:
+    mmu->mbc.mbc_1.ram_enable = false;
+    mmu->mbc.mbc_1.mode = 0;
+    mmu->mbc.mbc_1.rom_bank_num = 1;
+    mmu->mbc.mbc_1.ram_bank_num = 0;
 
-        default:
-            return;
-    }
+  default:
+    return;
+  }
 }
 
 void init_hardware_registers(MMU *mmu) {
@@ -72,16 +72,15 @@ uint8_t rom_header_checksum(MMU *mmu) {
   return checksum;
 }
 
-uint8_t read_byte (BOY *boy, uint16_t address) {
+uint8_t read_byte(BOY *boy, uint16_t address) {
   log_set_level(1);
 
   // during dma, only hram area is readable
   uint8_t data = 0xFF;
 
-  if(boy->mmu.dma_transfer && address >= HRAM_START && address <= HRAM_END) {
+  if (boy->mmu.dma_transfer && address >= HRAM_START && address <= HRAM_END) {
     data = boy->mmu.hram[address - HRAM_START];
-  }
-  else if (boy->mmu.dma_transfer){
+  } else if (boy->mmu.dma_transfer) {
     data = handle_dma_read(boy, boy->mmu.dma_src + boy->mmu.dma_progress);
   }
 
@@ -89,47 +88,38 @@ uint8_t read_byte (BOY *boy, uint16_t address) {
     // handle cartridge read
     // may need to tick timers inside the mbc to handle the timing differences
     data = handle_cart_read(&boy->mmu, address);
-  }
-  else if (address >= VRAM_START && address <= VRAM_END) {
+  } else if (address >= VRAM_START && address <= VRAM_END) {
     log_warn("VRAM handler for address 0x%04X not implemented\n", address);
     data = boy->mmu.vram[address - VRAM_START];
     // handle vram reads here
     // not implemented yet
-  }
-  else if (address >= SRAM_START && address <= SRAM_END) {
+  } else if (address >= SRAM_START && address <= SRAM_END) {
     // handle external ram read here
     data = read_sram(&boy->mmu, address);
 
-  }
-  else if (address >= WRAM_START && address <= WRAM_END) {
+  } else if (address >= WRAM_START && address <= WRAM_END) {
     data = boy->mmu.wram[address - WRAM_START];
 
-  }
-  else if (address >= 0xE000 && address <= 0xFDFF) {
+  } else if (address >= 0xE000 && address <= 0xFDFF) {
     // handle echo ram
     // technically use of this area is prohibted so no need to emulate
     log_warn("ECHO RAM handler for address 0x%04X not implemented", address);
-  }
-  else if (address >= 0xFE00 && address <= 0xFE9F) {
+  } else if (address >= 0xFE00 && address <= 0xFE9F) {
     // handle oam
     log_warn("OAM handler for address 0x%04X not implemented", address);
-  }
-  else if (address >= 0xFEA0 && address <= 0xFEFF) {
+  } else if (address >= 0xFEA0 && address <= 0xFEFF) {
     // use of this area prohibited
     log_warn("prohibited area handler for address 0x%04X not implemented",
-              address);
-  }
-  else if (address >= 0xFF00 && address <= 0xFF7F) {
+             address);
+  } else if (address >= 0xFF00 && address <= 0xFF7F) {
     // handle IO registers
     data = handle_io_read(boy, address);
 
-  }
-  else if (address >= 0xFF80 && address <= 0xFFFE) {
+  } else if (address >= 0xFF80 && address <= 0xFFFE) {
     // handle HRAM
     data = boy->mmu.hram[address - HRAM_START];
 
-  }
-  else if (address == 0xFFFF) {
+  } else if (address == 0xFFFF) {
     // interrupt enable
     data = boy->mmu.IE;
   }
@@ -139,14 +129,14 @@ uint8_t read_byte (BOY *boy, uint16_t address) {
 }
 
 uint8_t read_byte_tick(BOY *boy, uint16_t address) {
-  uint8_t data = read_byte(boy,  address);
+  uint8_t data = read_byte(boy, address);
   tick(boy, 1);
 
   return data;
 }
 
 void write_byte(BOY *boy, uint16_t address, uint8_t data) {
-  if(boy->mmu.dma_transfer) {
+  if (boy->mmu.dma_transfer) {
     return;
   }
 
@@ -190,7 +180,6 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
 
   // all writes take 1 m cycle
   tick(boy, 1);
-
 }
 
 uint8_t handle_cart_read(MMU *mmu, uint16_t address) {
@@ -355,45 +344,45 @@ uint8_t handle_io_read(BOY *boy, uint16_t address) {
   } else if (address >= 0xFF40 && address <= 0xFF4B) {
     // handle lcd control, status, position, scrolling and paletters
     switch (address) {
-      case 0xFF41:
-        data = boy->mmu.STAT;
-        break;
+    case 0xFF41:
+      data = boy->mmu.STAT;
+      break;
 
-      case 0xFF42:
-        data = boy->mmu.SCX;
-        break;
+    case 0xFF42:
+      data = boy->mmu.SCX;
+      break;
 
-      case 0xFF43:
-        data = boy->mmu.SCY;
-        break;
+    case 0xFF43:
+      data = boy->mmu.SCY;
+      break;
 
-      case 0xFF44:
-        data = boy->mmu.LY;
-        break;
+    case 0xFF44:
+      data = boy->mmu.LY;
+      break;
 
-      case 0xFF47:
-        data = boy->mmu.BGP;
-        break;
+    case 0xFF47:
+      data = boy->mmu.BGP;
+      break;
 
-      case 0xFF48:
-        data = boy->mmu.OBP0;
-        break;
+    case 0xFF48:
+      data = boy->mmu.OBP0;
+      break;
 
-      case 0xFF49:
-        data = boy->mmu.OBP1;
-        break;
+    case 0xFF49:
+      data = boy->mmu.OBP1;
+      break;
 
-      case 0xFF4A:
-        data = boy->mmu.WX;
-        break;
+    case 0xFF4A:
+      data = boy->mmu.WX;
+      break;
 
-      case 0xFF4B:
-        data = boy->mmu.WY;
-        break;
+    case 0xFF4B:
+      data = boy->mmu.WY;
+      break;
 
-
-      default:
-        log_warn("LCD control handler for address 0x%04X not implemented", address);
+    default:
+      log_warn("LCD control handler for address 0x%04X not implemented",
+               address);
     }
   } else if (address == 0xFF46) {
     // handle OAM DMA transfer here
@@ -415,9 +404,9 @@ void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
     boy->mmu.SC = data;
 
     // hook for viewing debug output in test roms
-    if(data == 0x81) {
-        printf("%c", boy->mmu.SB);
-        fflush(stdout);
+    if (data == 0x81) {
+      printf("%c", boy->mmu.SB);
+      fflush(stdout);
     }
 
   } else if (address >= 0xFF04 && address <= 0xFF07) {
@@ -436,11 +425,10 @@ void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
     // handle lcd control, status, position, scrolling and paletters
     log_warn("only dma supported for address 0x%04X", address);
 
-    if(address == 0xFF46) {
+    if (address == 0xFF46) {
       boy->mmu.enabling_dma = true;
       boy->mmu.dma_src = (data & 0xDF) << 8;
     }
-
   }
 }
 
@@ -509,7 +497,8 @@ void handle_mbc1_write(MMU *mmu, uint16_t address, uint8_t data) {
 }
 
 uint8_t handle_dma_read(BOY *boy, uint16_t address) {
-  // this is the same as read_byte() but does not tick the timers and is only for the mem sections that dma can read from
+  // this is the same as read_byte() but does not tick the timers and is only
+  // for the mem sections that dma can read from
   //
 
   // default for out of memory reads is 0xFF
@@ -532,14 +521,11 @@ uint8_t handle_dma_read(BOY *boy, uint16_t address) {
   return data;
 }
 
-
 void handle_dma_write(MMU *mmu, uint8_t offset, uint8_t data) {
   if (offset < 0 || offset > 0x9F) {
     log_error("out of range dma access");
     return;
   };
-
-
 
   memset(&mmu->oam[offset], data, 8);
 }
@@ -552,7 +538,6 @@ SPRITE *handle_oam_read(MMU *mmu, uint8_t offset) {
 
   return &mmu->oam[offset];
 }
-
 
 int get_zero_bank_num(MMU *mmu) {
   switch (mmu->rom_size) {
@@ -578,7 +563,8 @@ int get_high_bank_num(MMU *mmu) {
   uint8_t bank = mmu->mbc.mbc_1.rom_bank_num & 0x1F;
 
   // apply the MBC1 translation rule: 0 becomes 1
-  if (bank == 0) bank = 1;
+  if (bank == 0)
+    bank = 1;
 
   //  mask it based on the actual ROM size (to prevent out-of-bounds)
   bank &= rom_mask(mmu->rom_size);
