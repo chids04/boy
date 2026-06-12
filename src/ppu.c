@@ -11,7 +11,7 @@
 
 void init_ppu(PPU *ppu) {
   ppu->ppu_mode = PPU_MODE_2;
-  ppu->cycle = 0;
+  ppu->dots = 0;
   ppu->oam_offset = 0;
   ppu->sprite_buffer = calloc(10, sizeof(SPRITE));
   ppu->sprite_buffer_offset = 0;
@@ -39,26 +39,25 @@ void handle_ppu(BOY *boy, int dots) {
     handle_oam_scan(boy);
   } else if (boy->ppu.ppu_mode == PPU_MODE_3) {
     handle_ppu_draw(boy);
-  }
-  else if(boy->ppu.ppu_mode == PPU_MODE_0){
-
+  } else if (boy->ppu.ppu_mode == PPU_MODE_0) {
   }
 
   set_mode(&boy->ppu);
-  // handle state transitions
-  // s
-  //
 }
 
 void set_mode(PPU *ppu) {
   if (ppu->ppu_mode == PPU_MODE_2 && ppu->dots == 80) {
+    // init ppu mode 3 state
+    mode3_init(ppu);
     ppu->ppu_mode = PPU_MODE_3;
     ppu->dots = 0;
-  } else if ( (ppu->ppu_mode == PPU_MODE_3) && (ppu->dots == 172 + ppu->ppu_state.PPU_DRAW.dot_delay) ) {
+  } else if ((ppu->ppu_mode == PPU_MODE_3) &&
+             (ppu->dots == 172 + ppu->ppu_state.PPU_DRAW.dot_delay)) {
     ppu->ppu_mode = PPU_MODE_0;
     ppu->dots = 0;
 
-  } else if ( (ppu->ppu_mode == PPU_MODE_0)  && (ppu->dots == 87 - ppu->ppu_state.PPU_DRAW.dot_delay) ) {
+  } else if ((ppu->ppu_mode == PPU_MODE_0) &&
+             (ppu->dots == 87 - ppu->ppu_state.PPU_DRAW.dot_delay)) {
     ppu->ppu_mode = PPU_MODE_1;
     ppu->dots = 0;
   }
@@ -153,15 +152,11 @@ MODE_3_STATE mode_3_tile_num(BOY *boy) {
   uint16_t x_offset;
 
   // add the x-offset
-  if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
-    x_offset = boy->ppu.pixel_fetcher.x_offset;
-  } else if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
-    // add x offset and scroll ofdset and wrap
+  if (boy->ppu.pixel_fetcher.state != PixelFetcher_WIN) {
     x_offset = (boy->ppu.pixel_fetcher.x_offset + (boy->mmu.SCX / 8)) & 0x1F;
   } else {
-    log_error("tile x-offset for pixel state %d not implemented",
-             boy->ppu.pixel_fetcher.state);
-    return NULL;
+    // window does not scroll
+    x_offset = boy->ppu.pixel_fetcher.x_offset;
   }
 
   uint16_t y_offset;
@@ -169,13 +164,13 @@ MODE_3_STATE mode_3_tile_num(BOY *boy) {
   // add y offset
   if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
     y_offset = 32 * (boy->ppu.pixel_fetcher.window_line / 8);
-  } else if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
+  } else if (boy->ppu.pixel_fetcher.state == PixelFetcher_BG) {
     y_offset = 32 * (((boy->mmu.LY + boy->mmu.SCY) & 0xFF) / 8);
   } else {
 
     log_error("tile y-offset for objects %d not implemented",
-             boy->ppu.pixel_fetcher.state);
-    return NULL;
+              boy->ppu.pixel_fetcher.state);
+    exit(1);
   }
 
   // ensure offset stays within the tilemap region
@@ -241,9 +236,9 @@ MODE_3_STATE mode_3_fifo(BOY *boy) {
   return MODE_3_TILE_LOW;
 }
 
-void mode_3_push(BOY *boy){
+void mode_3_push(BOY *boy) {
   if (ppu_queue_is_empty(&boy->ppu.background_fifo)) {
-    return ;
+    return;
   }
 
   // discard scx % 8 pixel
@@ -257,7 +252,6 @@ void mode_3_push(BOY *boy){
 
   // dequeue a background pixel;
   BGWinFifoEntry *entry = ppu_queue_dequeue(&boy->ppu.background_fifo);
-
 }
 
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_number) {
