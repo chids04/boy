@@ -2,13 +2,20 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Build GB Emulator",
+			"label": "build boy",
 			"type": "shell",
 			"command": "cmake --build --preset debug",
 			"group": {
 				"kind": "build",
 				"isDefault": true
 			},
-		}
+		},
+    {
+      "label": "run boy",
+      "type" : "shell",
+      "command": "./build/debug/boy",
+      "dependsOn" : ["build boy"],
+      "dependsOrder" : "seqeuence"
+    }
 	]
 }

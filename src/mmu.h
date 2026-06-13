@@ -40,7 +40,6 @@
 #define HRAM_SIZE 0x7F
 #define OAM_SIZE 0xA0
 
-
 enum MBC_TYPE {
   MBC_NONE = 0x0,
   MBC_1,
@@ -146,11 +145,9 @@ struct MMU {
   uint8_t OBP1;
   uint8_t WX;
   uint8_t WY;
-
-
 };
 
-MMU* init_mmu(uint8_t *rom);
+MMU *init_mmu(uint8_t *rom);
 void init_mbc(MMU *mmu);
 void init_hardware_registers(MMU *mmu);
 uint8_t rom_header_checksum(MMU *mmu);
@@ -164,6 +161,7 @@ int get_high_bank_num(MMU *mmu);
 uint8_t read_byte(BOY *boy, uint16_t address);
 uint8_t read_byte_tick(BOY *boy, uint16_t address);
 uint8_t read_byte_no_tick(BOY *boy, uint16_t address);
+void write_byte_tick(BOY *boy, uint16_t address, uint8_t data);
 void write_byte(BOY *boy, uint16_t address, uint8_t data);
 
 void write_sram(MMU *mmu, uint16_t address, uint8_t data);

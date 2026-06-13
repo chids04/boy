@@ -3,6 +3,7 @@
 #include "common.h"
 #include "log.h"
 #include "mmu.h"
+#include "ppu_queue.h"
 #include "utils.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -23,12 +24,15 @@ void init_ppu(PPU *ppu) {
 }
 
 void mode3_init(PPU *ppu) {
-  ppu->ppu_state.PPU_DRAW.mode_3_state = MODE_3_TILE_LOW;
+  ppu->ppu_mode = PPU_MODE_3;
+  ppu->ppu_state.PPU_DRAW.mode_3_state = MODE_3_TILE_NUM;
   ppu->ppu_state.PPU_DRAW.tile_low = 0;
   ppu->ppu_state.PPU_DRAW.tile_high = 0;
   ppu->ppu_state.PPU_DRAW.tile_address = 0;
   ppu->ppu_state.PPU_DRAW.scx_delay = 0;
   ppu->ppu_state.PPU_DRAW.dot_delay = 0;
+
+  ppu->pixel_fetcher.cycles_remaining = 2;
 }
 
 // called every M cycle ( 4 T Cycles )
@@ -49,7 +53,6 @@ void set_mode(PPU *ppu) {
   if (ppu->ppu_mode == PPU_MODE_2 && ppu->dots == 80) {
     // init ppu mode 3 state
     mode3_init(ppu);
-    ppu->ppu_mode = PPU_MODE_3;
     ppu->dots = 0;
   } else if ((ppu->ppu_mode == PPU_MODE_3) &&
              (ppu->dots == 172 + ppu->ppu_state.PPU_DRAW.dot_delay)) {
@@ -105,22 +108,31 @@ void handle_ppu_draw(BOY *boy) {
   // push pixels in queue
   mode_3_push(boy);
 
-  switch (boy->ppu.ppu_state.PPU_DRAW.mode_3_state) {
-  case MODE_3_TILE_NUM:
-    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_num(boy);
-    break;
+  if (boy->ppu.pixel_fetcher.cycles_remaining > 0) {
+    boy->ppu.pixel_fetcher.cycles_remaining--;
+  } else {
+    // do all work on second dot;
+    switch (boy->ppu.ppu_state.PPU_DRAW.mode_3_state) {
+    case MODE_3_TILE_NUM:
+      boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_num(boy);
+      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      break;
 
-  case MODE_3_TILE_LOW:
-    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_low(boy);
-    break;
+    case MODE_3_TILE_LOW:
+      boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_low(boy);
+      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      break;
 
-  case MODE_3_TILE_HIGH:
-    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_high(boy);
-    break;
+    case MODE_3_TILE_HIGH:
+      boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_high(boy);
+      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      break;
 
-  case MODE_3_FIFO:
-    boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_fifo(boy);
-    break;
+    case MODE_3_FIFO:
+      boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_fifo(boy);
+      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      break;
+    }
   }
 }
 
@@ -161,17 +173,20 @@ MODE_3_STATE mode_3_tile_num(BOY *boy) {
 
     log_error("tile y-offset for objects %d not implemented",
               boy->ppu.pixel_fetcher.state);
+
+    exit(1);
   }
 
+  // add y offset
   uint16_t y_offset;
 
-  // add y offset
   if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
     y_offset = 32 * (boy->ppu.pixel_fetcher.window_line / 8);
+
   } else if (boy->ppu.pixel_fetcher.state == PixelFetcher_BG) {
     y_offset = 32 * (((boy->mmu.LY + boy->mmu.SCY) & 0xFF) / 8);
-  } else {
 
+  } else {
     log_error("tile y-offset for objects %d not implemented",
               boy->ppu.pixel_fetcher.state);
     exit(1);
@@ -203,6 +218,8 @@ MODE_3_STATE mode_3_tile_low(BOY *boy) {
   boy->ppu.ppu_state.PPU_DRAW.tile_address = base_tile_address + tile_y_offset;
   boy->ppu.ppu_state.PPU_DRAW.tile_low =
       read_byte_no_tick(boy, boy->ppu.ppu_state.PPU_DRAW.tile_address);
+
+  return MODE_3_TILE_HIGH;
 }
 
 MODE_3_STATE mode_3_tile_high(BOY *boy) {
@@ -214,18 +231,15 @@ MODE_3_STATE mode_3_tile_high(BOY *boy) {
 
 MODE_3_STATE mode_3_fifo(BOY *boy) {
 
-  // not just if its full but if it has less than 8 spaces
-  // change this
-  if (ppu_queue_is_full(&boy->ppu.background_fifo)) {
-    // restart mode 3 fifo if it is
+  if (!ppu_queue_is_empty(&boy->ppu.background_fifo)) {
+    // add one cycle delay to mode 3;
     boy->ppu.ppu_state.PPU_DRAW.dot_delay += 1;
     return MODE_3_FIFO;
   }
 
   for (int i = 0; i < 8; ++i) {
-    uint8_t color_idx =
-        (get_bit(boy->ppu.ppu_state.PPU_DRAW.tile_high, i) << 1) |
-        get_bit(boy->ppu.ppu_state.PPU_DRAW.tile_low, i);
+    uint8_t color_idx = get_color_idx(boy->ppu.ppu_state.PPU_DRAW.tile_low,
+                                      boy->ppu.ppu_state.PPU_DRAW.tile_high, i);
 
     BGWinFifoEntry *pixel = malloc(sizeof(BGWinFifoEntry));
     pixel->color_idx = color_idx;
@@ -264,4 +278,8 @@ uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_number) {
   }
 
   return (uint8_t)TILE_8800 + ((int8_t)tile_number * 16);
+}
+
+uint8_t get_color_idx(uint8_t low, uint8_t high, int bit_idx) {
+  return (get_bit(high, bit_idx) << 1) | get_bit(low, bit_idx);
 }

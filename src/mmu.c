@@ -80,6 +80,7 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
 
   if (boy->mmu.dma_transfer && address >= HRAM_START && address <= HRAM_END) {
     data = boy->mmu.hram[address - HRAM_START];
+
   } else if (boy->mmu.dma_transfer) {
     data = handle_dma_read(boy, boy->mmu.dma_src + boy->mmu.dma_progress);
   }
@@ -88,13 +89,11 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
     // handle cartridge read
     // may need to tick timers inside the mbc to handle the timing differences
     data = handle_cart_read(&boy->mmu, address);
+
   } else if (address >= VRAM_START && address <= VRAM_END) {
-    log_warn("VRAM handler for address 0x%04X not implemented\n", address);
     data = boy->mmu.vram[address - VRAM_START];
-    // handle vram reads here
-    // not implemented yet
+
   } else if (address >= SRAM_START && address <= SRAM_END) {
-    // handle external ram read here
     data = read_sram(&boy->mmu, address);
 
   } else if (address >= WRAM_START && address <= WRAM_END) {
@@ -104,8 +103,10 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
     // handle echo ram
     // technically use of this area is prohibted so no need to emulate
     log_warn("ECHO RAM handler for address 0x%04X not implemented", address);
-  } else if (address >= 0xFE00 && address <= 0xFE9F) {
+  } else if (address >= OAM_START && address <= OAM_END) {
     // handle oam
+    data = ((uint8_t *)boy->mmu.oam)[address - OAM_START];
+
     log_warn("OAM handler for address 0x%04X not implemented", address);
   } else if (address >= 0xFEA0 && address <= 0xFEFF) {
     // use of this area prohibited
@@ -177,6 +178,10 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
   } else if (address == 0xFFFF) {
     boy->mmu.IE = data;
   }
+}
+
+void write_byte_tick(BOY *boy, uint16_t address, uint8_t data) {
+  write_byte(boy, address, data);
 
   // all writes take 1 m cycle
   tick(boy, 1);

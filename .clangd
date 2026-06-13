@@ -1,1 +1,2 @@
-CompilationDatabase: "build/debug"
+ CompileFlags:
+    CompilationDatabase: build/debug

@@ -3,6 +3,7 @@
 #include "common.h"
 #include "ppu.h"
 #include "ppu_queue.h"
+#include "utils.h"
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -72,7 +73,7 @@ void test_dma_timing() {
   // write to mem location to start dma from beginning of wram
   // write byte internally ticks the timer
   // this M cycle is where the dma is requested
-  write_byte(boy, 0xFF46, 0xC0);
+  write_byte_tick(boy, 0xFF46, 0xC0);
 
   assert(boy->mmu.dma_src == 0xC000);
   assert(boy->mmu.dma_delay == true);
@@ -108,7 +109,7 @@ void test_dma_transfer() {
 
   memcpy(&boy->mmu.wram[0], (uint8_t *)expected, 160);
 
-  write_byte(boy, 0xFF46, 0xC0);
+  write_byte_tick(boy, 0xFF46, 0xC0);
 
   // tick to skip delay
   tick(boy, 1);
@@ -347,6 +348,81 @@ void test_fetch_window() {
    */
 }
 
+void test_background_tile_fetch() {
+
+  BOY *boy = test_init();
+
+  // no scx delay
+  boy->mmu.SCX = 0;
+
+  boy->mmu.LCDC = 0;
+  // set LCDC bit 5 to 0 to hide window
+  set_bit(&boy->mmu.LCDC, 5);
+
+  // set LCDC bit 4 for 0x8000 addressing into tile data
+  set_bit(&boy->mmu.LCDC, 4);
+
+  // set LCDC bit 3 for 0x9C00 BG tilemap
+  set_bit(&boy->mmu.LCDC, 3);
+
+  // store tile number 1 in bg map;
+  write_byte(boy, 0x9C00, 1);
+
+  // store some tile data in vram;
+  uint8_t tile_data[16] = {0xF0, 0xF0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                           0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+  memcpy(boy->mmu.vram + 16, tile_data, sizeof(tile_data));
+
+  // set ppu to mode 3 state
+  mode3_init(&boy->ppu);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
+
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
+  assert(boy->ppu.ppu_state.PPU_DRAW.tile_num == 0);
+
+  // computation always happens on second tick;
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.tile_num == 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_LOW);
+
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_LOW);
+
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.tile_low == tile_data[0]);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_HIGH);
+
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_HIGH);
+
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.tile_high == tile_data[1]);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
+
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
+
+  handle_ppu(boy, 1);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
+
+  // assert 8 pixels in fifo
+  assert(ppu_queue_is_full(&boy->ppu.background_fifo) == true);
+
+  // compare the pixels in the fifo to see if they are what we expect
+  //
+  PPU_QUEUE test_pixels;
+  ppu_queue_init(&test_pixels, FIFO_SIZE);
+
+  for (int i = 0; i < 8; ++i) {
+    uint8_t color_idx = get_color_idx(boy->ppu.ppu_state.PPU_DRAW.tile_low,
+                                      boy->ppu.ppu_state.PPU_DRAW.tile_high, i);
+
+    assert(color_idx == ((BGWinFifoEntry *)(*test_pixels.queue))[0].color_idx);
+  }
+}
+
 void test_queue_full() {
   PPU_QUEUE q;
 
@@ -381,13 +457,16 @@ void test_queue_order() {
   ObjFifoEntry *dequeue2 = ppu_queue_dequeue(&q);
   ObjFifoEntry *dequeue3 = ppu_queue_dequeue(&q);
 
-  assert(dequeue1->bg_priority == 1 && dequeue1->color_idx == 01 && dequeue1->pallette == 0);
-  assert(dequeue2->bg_priority == 2 && dequeue2->color_idx == 00 && dequeue2->pallette == 0);
-  assert(dequeue3->bg_priority == 3 && dequeue3->color_idx == 10 && dequeue3->pallette == 0);
+  assert(dequeue1->bg_priority == 1 && dequeue1->color_idx == 01 &&
+         dequeue1->pallette == 0);
+  assert(dequeue2->bg_priority == 2 && dequeue2->color_idx == 00 &&
+         dequeue2->pallette == 0);
+  assert(dequeue3->bg_priority == 3 && dequeue3->color_idx == 10 &&
+         dequeue3->pallette == 0);
   assert(ppu_queue_is_empty(&q) == true);
 }
 
-void test_queue_dequeue_enqueue(){
+void test_queue_dequeue_enqueue() {
   PPU_QUEUE q;
 
   ObjFifoEntry entry1 = {.bg_priority = 1, .color_idx = 01, .pallette = 0};
@@ -405,10 +484,12 @@ void test_queue_dequeue_enqueue(){
   assert(ppu_queue_enqueue(&q, &entry3) == true);
 
   ObjFifoEntry *dequeue2 = ppu_queue_dequeue(&q);
-  assert(dequeue2->bg_priority == 2 && dequeue2->color_idx == 00 && dequeue2->pallette == 0);
+  assert(dequeue2->bg_priority == 2 && dequeue2->color_idx == 00 &&
+         dequeue2->pallette == 0);
 
   ObjFifoEntry *dequeue3 = ppu_queue_dequeue(&q);
-  assert(dequeue3->bg_priority == 3 && dequeue3->color_idx == 10 && dequeue3->pallette == 0);
+  assert(dequeue3->bg_priority == 3 && dequeue3->color_idx == 10 &&
+         dequeue3->pallette == 0);
 
   assert(ppu_queue_is_empty(&q) == true);
 }

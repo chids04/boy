@@ -94,8 +94,8 @@ void ld_imm16_sp(BOY *boy) {
   uint16_t imm16 = read_imm16(boy);
 
   // 2 cycles to write the 16 bit value to memory
-  write_byte(boy, imm16, boy->cpu.SP & 0xFF);
-  write_byte(boy, imm16 + 1, (boy->cpu.SP >> 8) & 0xFF);
+  write_byte_tick(boy, imm16, boy->cpu.SP & 0xFF);
+  write_byte_tick(boy, imm16 + 1, (boy->cpu.SP >> 8) & 0xFF);
 
   boy->cpu.cycles = 5;
 }
@@ -104,7 +104,7 @@ void ld_imm16_a(BOY *boy) {
   log_debug("Executing %s", __func__);
   // load register A to mem[nn], with nn being word after opcode
   uint16_t imm16 = read_imm16(boy);
-  write_byte(boy, imm16, boy->cpu.A);
+  write_byte_tick(boy, imm16, boy->cpu.A);
   boy->cpu.cycles = 4;
 }
 
@@ -473,13 +473,11 @@ void halt(BOY *boy) {
 
   uint8_t pending_interrupts = boy->mmu.IF & boy->mmu.IE;
 
-  if(pending_interrupts){
-      decode_instruction(boy, true);
+  if (pending_interrupts) {
+    decode_instruction(boy, true);
+  } else {
+    boy->cpu.is_halted = true;
   }
-  else {
-      boy->cpu.is_halted = true;
-  }
-
 }
 
 void alu_a_r8(BOY *boy) {
@@ -626,8 +624,6 @@ void subc_a_r8(BOY *boy) {
   } else {
     clear_flag(&boy->cpu, FLAG_Z);
   }
-
-
 }
 
 void and_a_r8(BOY *boy) {
@@ -735,14 +731,13 @@ void ldh_imm8_a(BOY *boy) {
   uint8_t n = read_imm8(boy);
   uint16_t dest = 0xFF00 | n;
 
-  write_byte(boy, dest, boy->cpu.A);
+  write_byte_tick(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 3;
 }
 
 void ldh_a_imm8(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint8_t n = read_imm8(boy);
-
 
   uint16_t src = 0xFF00 | n;
   boy->cpu.A = read_byte_tick(boy, src);
@@ -796,8 +791,8 @@ void push_r16stk(BOY *boy) {
   uint8_t reg = get_bit_range(boy->cpu.opcode, 5, 4);
   uint16_t data = read_r16stk(&boy->cpu, reg);
 
-  write_byte(boy, --boy->cpu.SP, data >> 8);
-  write_byte(boy, --boy->cpu.SP, data & 0xFF);
+  write_byte_tick(boy, --boy->cpu.SP, data >> 8);
+  write_byte_tick(boy, --boy->cpu.SP, data & 0xFF);
 
   tick(boy, 1);
 
@@ -847,7 +842,7 @@ void jp_cc_imm16(BOY *boy) {
 void ldh_c_a(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint16_t dest = 0xFF00 + boy->cpu.C;
-  write_byte(boy, dest, boy->cpu.A);
+  write_byte_tick(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 2;
 }
 
@@ -862,7 +857,7 @@ void ldh_a_c(BOY *boy) {
 void ld_nn_a(BOY *boy) {
   log_debug("Executing %s", __func__);
   uint16_t dest = read_imm16(boy);
-  write_byte(boy, dest, boy->cpu.A);
+  write_byte_tick(boy, dest, boy->cpu.A);
   boy->cpu.cycles = 4;
 }
 
@@ -899,8 +894,8 @@ void call_cond_imm16(BOY *boy) {
   uint16_t r16 = read_imm16(boy);
 
   if (condition(&boy->cpu, cond)) {
-    write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
-    write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+    write_byte_tick(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+    write_byte_tick(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
     // set pc
     boy->cpu.PC = r16;
@@ -991,7 +986,7 @@ void subc_a_imm8(BOY *boy) {
     set_flag(&boy->cpu, FLAG_H);
   } else {
     clear_flag(&boy->cpu, FLAG_H);
-}
+  }
 
   if (((int)(boy->cpu.A) - (int)data - (int)carry) < 0) {
     set_flag(&boy->cpu, FLAG_C);
@@ -1097,8 +1092,8 @@ void call_imm16(BOY *boy) {
   // pc will be holding the address of instruction to save
   // push this to the stack
   // 2 m cycles
-  write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
-  write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+  write_byte_tick(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+  write_byte_tick(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
   // set pc
   boy->cpu.PC = dest;
@@ -1114,8 +1109,8 @@ void rst(BOY *boy) {
 
   uint16_t addr = get_bit_range(boy->cpu.opcode, 4, 3) * 8;
 
-  write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
-  write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
+  write_byte_tick(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+  write_byte_tick(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
   boy->cpu.PC = addr;
   tick(boy, 1);
@@ -1405,7 +1400,7 @@ void res_r8(BOY *boy) {
   uint8_t reg = get_bit_range(boy->cpu.opcode, 2, 0);
   uint8_t old = read_r8(boy, reg);
 
-  uint8_t new = old &mask;
+  uint8_t new = old & mask;
   tick(boy, 1);
 
   write_r8(boy, new, reg);
@@ -1439,27 +1434,24 @@ void decode_instruction(BOY *boy, bool halt_bug) {
     boy->cpu.enable_interrupts = false;
   }
 
-
   check_interrupts(boy);
 
-  if (boy->cpu.is_halted){
-      tick(boy, 1);
-      return;
+  if (boy->cpu.is_halted) {
+    tick(boy, 1);
+    return;
   }
 
-  if(halt_bug){
-      // dont increment pc if halt bug occurs (instruction after halt executes twice);
-      boy->cpu.opcode = read_byte_tick(boy, boy->cpu.PC);
-  }
-  else {
-      boy->cpu.opcode = read_byte_tick(boy, boy->cpu.PC++);
-
+  if (halt_bug) {
+    // dont increment pc if halt bug occurs (instruction after halt executes
+    // twice);
+    boy->cpu.opcode = read_byte_tick(boy, boy->cpu.PC);
+  } else {
+    boy->cpu.opcode = read_byte_tick(boy, boy->cpu.PC++);
   }
 
   // local read-only copy to save typing lol
   uint8_t op = boy->cpu.opcode;
   // block 0
-
 
   // check for no op first
 

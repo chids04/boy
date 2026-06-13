@@ -32,10 +32,9 @@ typedef struct PixelFetcher {
 
   int x_offset;
   int window_line;
-
+  int cycles_remaining;
 
 } PixelFetcher;
-
 
 struct PPU {
   long long dots;
@@ -59,8 +58,6 @@ struct PPU {
     } PPU_DRAW;
   } ppu_state;
 
-
-
   PPU_QUEUE background_fifo;
   PPU_QUEUE sprite_fifo;
 
@@ -82,10 +79,10 @@ typedef struct ObjFifoEntry {
 
 typedef struct BGWinFifoEntry {
   uint8_t color_idx;
-} BGWinFifoEntry ;
+} BGWinFifoEntry;
 
 void init_ppu(PPU *ppu);
-void handle_ppu(BOY *boy, int cycles);
+void handle_ppu(BOY *boy, int dots);
 void handle_oam_scan(BOY *boy);
 void handle_ppu_draw(BOY *boy);
 void set_mode(PPU *ppu);
@@ -104,3 +101,4 @@ MODE_3_STATE mode_3_tile_high(BOY *boy);
 MODE_3_STATE mode_3_fifo(BOY *boy);
 void mode_3_push(BOY *boy);
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_num);
+uint8_t get_color_idx(uint8_t low, uint8_t high, int bit_idx);

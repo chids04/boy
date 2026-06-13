@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 // helpers
-BOY* test_init();
+BOY *test_init();
 void scan_full_oam(BOY *boy);
 void generate_test_sprites(SPRITE *oam);
 
@@ -22,11 +22,10 @@ void test_sprites_oam_overflow();
 void test_sprites_x_zero_filtered();
 
 // sprite draw tests
+void test_background_tile_fetch();
 
 // write test the verifies window is fetched when it should be
 void test_fetch_window();
-
-
 
 // queue tests
 void test_queue_full();

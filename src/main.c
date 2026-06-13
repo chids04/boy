@@ -1,18 +1,19 @@
 #include "boy.h"
 #include "common.h"
+#include "raylib.h"
+#include "test.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "raylib.h"
-#include "test.h"
 
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
 int main() {
-  //test_ppu_transitions();
-
+  // test_ppu_transitions();
+  test_background_tile_fetch();
+  return 0;
 
   test_queue_full();
   test_queue_order();
@@ -55,7 +56,6 @@ int main() {
   const int SCREEN_WIDTH = 400;
   const int SCREEN_HEIGHT = 360;
 
-
   // -10 for some padding
   const int DEBUG_PANEL_WIDTH = WINDOW_WIDTH - 10;
   const int DEBUG_PANEL_HEIGHT = 200;
@@ -69,7 +69,6 @@ int main() {
 
   log_state(&boy);
 
-
   while (!WindowShouldClose()) {
     step_boy(&boy);
 
@@ -77,15 +76,13 @@ int main() {
     ClearBackground(RAYWHITE);
 
     // placeholder for the gameboy display
-    DrawRectangle(WINDOW_WIDTH/2 - SCREEN_WIDTH / 2, 10, SCREEN_WIDTH, SCREEN_HEIGHT, BLACK);
-    DrawRectangleLines(WINDOW_WIDTH/2 - DEBUG_PANEL_WIDTH / 2, SCREEN_HEIGHT + 15, DEBUG_PANEL_WIDTH, DEBUG_PANEL_HEIGHT, PINK);
+    DrawRectangle(WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2, 10, SCREEN_WIDTH,
+                  SCREEN_HEIGHT, BLACK);
+    DrawRectangleLines(WINDOW_WIDTH / 2 - DEBUG_PANEL_WIDTH / 2,
+                       SCREEN_HEIGHT + 15, DEBUG_PANEL_WIDTH,
+                       DEBUG_PANEL_HEIGHT, PINK);
 
-
-    GuiLabel((Rectangle){0,0, 100, 20},  "test");
-
-
-
-
+    GuiLabel((Rectangle){0, 0, 100, 20}, "test");
 
     // DrawRectangle(225, 132, 24, 84, BLACK);
     // DrawRectangle(195, 161, 84, 25, BLACK);
