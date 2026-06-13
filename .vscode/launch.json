@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
+            "type": "codelldb",
             "request": "launch",
-            "name": "Debug",
-            "program": "${workspaceFolder}/build/debug/gb_emu",
+            "name": "debug boy",
+            "program": "${workspaceFolder}/build/debug/boy",
             "cwd": "${workspaceFolder}"
         }
     ]
