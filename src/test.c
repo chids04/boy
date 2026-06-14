@@ -382,13 +382,14 @@ void test_background_tile_fetch() {
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_num == 0);
 
-  // computation always happens on second tick;
   handle_ppu(boy, 1);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_num == 1);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_LOW);
 
+  // computation always happens on second tick;
   handle_ppu(boy, 1);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_LOW);
+  assert(boy->ppu.ppu_state.PPU_DRAW.tile_low == 0);
 
   handle_ppu(boy, 1);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_low == tile_data[0]);
@@ -404,14 +405,15 @@ void test_background_tile_fetch() {
   handle_ppu(boy, 1);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
 
+  // loop back to starting state
   handle_ppu(boy, 1);
-  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
 
   // assert 8 pixels in fifo
   assert(ppu_queue_is_full(&boy->ppu.background_fifo) == true);
 
   // compare the pixels in the fifo to see if they are what we expect
-  //
+  // this will fail cus test pixels empty rn;
   PPU_QUEUE test_pixels;
   ppu_queue_init(&test_pixels, FIFO_SIZE);
 
@@ -421,6 +423,17 @@ void test_background_tile_fetch() {
 
     assert(color_idx == ((BGWinFifoEntry *)(*test_pixels.queue))[0].color_idx);
   }
+}
+
+void test_ppu_mcycle_mode3() {
+  BOY *boy = test_init();
+
+  mode3_init(&boy->ppu);
+  tick(boy, 1);
+
+  // 1 M-Cycle is 4 dots (PPU M-Cycles)
+  // mode 3 should be on the third step (fetching tile high byte);
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_HIGH);
 }
 
 void test_queue_full() {

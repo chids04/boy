@@ -9,8 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-
 static FILE *log_fp = NULL;
 static int line = 0;
 
@@ -36,7 +34,7 @@ void tick(BOY *boy, int cycles) {
   // also tick the ppu here too
   handle_dma(boy);
 
-  for(int i=0; i<4; i++) {
+  for (int i = 0; i < 4; i++) {
     handle_ppu(boy, 1);
   }
 };
@@ -45,32 +43,30 @@ void handle_dma(BOY *boy) {
   // transfer one byte every M cycle (4 T cycles)
 
   // one m cycle delay
-  if(boy->mmu.enabling_dma) {
+  if (boy->mmu.enabling_dma) {
     boy->mmu.dma_delay = true;
     boy->mmu.enabling_dma = false;
     return;
   }
 
-  if(boy->mmu.dma_delay) {
+  if (boy->mmu.dma_delay) {
     boy->mmu.dma_transfer = true;
     boy->mmu.dma_progress = 0;
     boy->mmu.dma_delay = false;
     return;
   }
 
-  if(boy->mmu.dma_transfer) {
-    if(boy->mmu.dma_progress < 160) {
+  if (boy->mmu.dma_transfer) {
+    if (boy->mmu.dma_progress < 160) {
       uint16_t src = boy->mmu.dma_src + boy->mmu.dma_progress;
       uint8_t data = handle_dma_read(boy, src);
 
-      memcpy(&((uint8_t*)boy->mmu.oam)[boy->mmu.dma_progress], &data, 8);
+      memcpy(&((uint8_t *)boy->mmu.oam)[boy->mmu.dma_progress], &data, 8);
       boy->mmu.dma_progress++;
-    }
-    else if(boy->mmu.dma_progress == 160) {
+    } else if (boy->mmu.dma_progress == 160) {
       boy->mmu.dma_transfer = false;
       boy->mmu.dma_progress = 0;
     }
-
   }
 }
 
@@ -86,68 +82,76 @@ void check_interrupts(BOY *boy) {
   // bitwise & will set the bit 1 the interrupt has been requested and enabled
   uint8_t pending_interrupts = boy->mmu.IF & boy->mmu.IE;
 
-  if(pending_interrupts != 0){
-      boy->cpu.is_halted = false;
+  if (pending_interrupts != 0) {
+    boy->cpu.is_halted = false;
 
-      // only handle interrupts if IME is set
-      if(boy->cpu.IME == true) {
-          handle_interrupts(boy, pending_interrupts);
-      }
+    // only handle interrupts if IME is set
+    if (boy->cpu.IME == true) {
+      handle_interrupts(boy, pending_interrupts);
+    }
+  }
+}
+
+void handle_interrupts(BOY *boy, uint8_t interrupts) {
+  // set so no other interrupts can occur mid interrupt
+  boy->cpu.IME = false;
+
+  // clear the bits of the IF flag to signal that the interrupt has been
+  // serviced
+
+  if (get_bit(interrupts, VBLANK) == 1) {
+    clear_bit(&boy->mmu.IF, VBLANK);
+    call_interrupt(boy, VBLANK);
+
+  } else if (get_bit(interrupts, LCD) == 1) {
+    clear_bit(&boy->mmu.IF, LCD);
+    call_interrupt(boy, LCD);
+  } else if (get_bit(interrupts, TIMER) == 1) {
+    clear_bit(&boy->mmu.IF, TIMER);
+    call_interrupt(boy, TIMER);
+
   }
 
+  else if (get_bit(interrupts, SERIAL) == 1) {
+    clear_bit(&boy->mmu.IF, SERIAL);
+    call_interrupt(boy, SERIAL);
+  }
+
+  else if (get_bit(interrupts, JOYPAD) == 1) {
+    clear_bit(&boy->mmu.IF, JOYPAD);
+    call_interrupt(boy, JOYPAD);
+  }
 }
 
-void handle_interrupts(BOY *boy, uint8_t interrupts){
-    // set so no other interrupts can occur mid interrupt
-    boy->cpu.IME = false;
+void call_interrupt(BOY *boy, INTERRUPTS interrupt) {
+  // two wait state where cpu does nothing
+  tick(boy, 2);
 
-    // clear the bits of the IF flag to signal that the interrupt has been serviced
+  uint16_t addr;
 
-    if(get_bit(interrupts, VBLANK) == 1) {
-        clear_bit(&boy->mmu.IF, VBLANK);
-        call_interrupt(boy, VBLANK);
+  switch (interrupt) {
+  case VBLANK:
+    addr = 0x40;
+    break;
+  case LCD:
+    addr = 0x48;
+    break;
+  case TIMER:
+    addr = 0x50;
+    break;
+  case SERIAL:
+    addr = 0x58;
+    break;
+  case JOYPAD:
+    addr = 0x60;
+    break;
+  }
 
-    }
-    else if(get_bit(interrupts, LCD) == 1) {
-        clear_bit(&boy->mmu.IF, LCD);
-        call_interrupt(boy, LCD);
-    }
-    else if(get_bit(interrupts, TIMER) == 1) {
-        clear_bit(&boy->mmu.IF, TIMER);
-        call_interrupt(boy, TIMER);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
+  write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
 
-    }
-
-    else if(get_bit(interrupts, SERIAL) == 1) {
-        clear_bit(&boy->mmu.IF, SERIAL);
-        call_interrupt(boy, SERIAL);
-    }
-
-    else if(get_bit(interrupts, JOYPAD) == 1) {
-        clear_bit(&boy->mmu.IF, JOYPAD);
-        call_interrupt(boy, JOYPAD);
-    }
-}
-
-void call_interrupt(BOY *boy, INTERRUPTS interrupt){
-    // two wait state where cpu does nothing
-    tick(boy, 2);
-
-    uint16_t addr;
-
-    switch(interrupt) {
-        case VBLANK: addr = 0x40; break;
-        case LCD: addr = 0x48; break;
-        case TIMER: addr = 0x50; break;
-        case SERIAL: addr = 0x58; break;
-        case JOYPAD: addr = 0x60; break;
-    }
-
-    write_byte(boy, --boy->cpu.SP, boy->cpu.PC >> 8);
-    write_byte(boy, --boy->cpu.SP, boy->cpu.PC & 0xFF);
-
-    boy->cpu.PC = addr;
-    tick(boy, 1);
+  boy->cpu.PC = addr;
+  tick(boy, 1);
 }
 
 void log_state(BOY *boy) {
@@ -176,7 +180,8 @@ void log_state(BOY *boy) {
 
   // printf("A: %02X F: %02X B: %02X C: %02X D: %02X E: %02X H: %02X L: %02X "
   //        "SP: %04X PC: %04X PCMEM: %02X,%02X,%02X,%02X\n",
-  //        boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D, boy->cpu.E,
-  //        boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2, m3);
-  //fflush(log_fp);
+  //        boy->cpu.A, boy->cpu.F, boy->cpu.B, boy->cpu.C, boy->cpu.D,
+  //        boy->cpu.E, boy->cpu.H, boy->cpu.L, boy->cpu.SP, pc, m0, m1, m2,
+  //        m3);
+  // fflush(log_fp);
 }

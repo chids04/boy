@@ -23,6 +23,7 @@ void test_sprites_x_zero_filtered();
 
 // sprite draw tests
 void test_background_tile_fetch();
+void test_ppu_mcycle_mode3();
 
 // write test the verifies window is fetched when it should be
 void test_fetch_window();

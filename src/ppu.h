@@ -90,6 +90,7 @@ bool to_sprite_buffer(BOY *boy, SPRITE *sprite);
 uint8_t sprite_height(MMU *mmu);
 
 void mode3_init(PPU *ppu);
+void reset_fetcher_cycles(PPU *ppu);
 
 MODE_3_STATE mode_3_tile_num(BOY *boy);
 

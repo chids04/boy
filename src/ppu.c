@@ -32,8 +32,16 @@ void mode3_init(PPU *ppu) {
   ppu->ppu_state.PPU_DRAW.scx_delay = 0;
   ppu->ppu_state.PPU_DRAW.dot_delay = 0;
 
-  ppu->pixel_fetcher.cycles_remaining = 2;
+  // each step of pixel fetching takes two steps
+  // this variable gets decremented each call to hanlde_ppu_draw()
+  // cycle 1 = 1 - 1 = 0, do no work
+  // cycle 2 = 0, do fetcher work so it's ready for the 3rd cycle, reset cycles
+  // remaining, update fetcher state cycle 3 = work from prev cycle availiable
+  // by cycle 3
+  reset_fetcher_cycles(ppu);
 }
+
+void reset_fetcher_cycles(PPU *ppu) { ppu->pixel_fetcher.cycles_remaining = 1; }
 
 // called every M cycle ( 4 T Cycles )
 void handle_ppu(BOY *boy, int dots) {
@@ -115,22 +123,22 @@ void handle_ppu_draw(BOY *boy) {
     switch (boy->ppu.ppu_state.PPU_DRAW.mode_3_state) {
     case MODE_3_TILE_NUM:
       boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_num(boy);
-      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      reset_fetcher_cycles(&boy->ppu);
       break;
 
     case MODE_3_TILE_LOW:
       boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_low(boy);
-      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      reset_fetcher_cycles(&boy->ppu);
       break;
 
     case MODE_3_TILE_HIGH:
       boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_tile_high(boy);
-      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      reset_fetcher_cycles(&boy->ppu);
       break;
 
     case MODE_3_FIFO:
       boy->ppu.ppu_state.PPU_DRAW.mode_3_state = mode_3_fifo(boy);
-      boy->ppu.pixel_fetcher.cycles_remaining = 2;
+      reset_fetcher_cycles(&boy->ppu);
       break;
     }
   }

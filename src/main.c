@@ -12,6 +12,7 @@
 
 int main() {
   // test_ppu_transitions();
+  test_ppu_mcycle_mode3();
   test_background_tile_fetch();
   return 0;
 
