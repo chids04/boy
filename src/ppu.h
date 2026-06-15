@@ -7,7 +7,7 @@
 #define MAX_SPRITES 10
 #define FIFO_SIZE 8
 
-enum TILE_ADDRESS_MODE { TILE_8000 = 8000, TILE_8800 = 9000 };
+enum TILE_ADDRESS_MODE { TILE_8000 = 0x8000, TILE_8800 = 0x9000 };
 
 typedef enum PPU_MODE {
   PPU_MODE_0, // hblank

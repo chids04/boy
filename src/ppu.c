@@ -154,6 +154,9 @@ void check_if_window_next(BOY *boy) {
 MODE_3_STATE mode_3_tile_num(BOY *boy) {
   uint16_t BG_MAP_ADDR;
 
+  // if bit 3 of LCDC set then bg map $9C00-$9FFF is used, otherwise it uses the
+  // one at $9800-$9BFF.
+
   if (get_bit(boy->mmu.LCDC, 3) == 1) {
     BG_MAP_ADDR = 0x9C00;
   } else {
@@ -211,8 +214,6 @@ MODE_3_STATE mode_3_tile_num(BOY *boy) {
 
 MODE_3_STATE mode_3_tile_low(BOY *boy) {
 
-  // if bit 3 of LCDC set then bg map $9C00-$9FFF is used, otherwise it uses the
-  // one at $9800-$9BFF.
   uint16_t base_tile_address =
       get_tile_base_address(&boy->mmu, boy->ppu.ppu_state.PPU_DRAW.tile_num);
 
@@ -259,7 +260,7 @@ MODE_3_STATE mode_3_fifo(BOY *boy) {
   }
 
   // go fetch the next tile
-  return MODE_3_TILE_LOW;
+  return MODE_3_TILE_NUM;
 }
 
 void mode_3_push(BOY *boy) {
@@ -282,10 +283,10 @@ void mode_3_push(BOY *boy) {
 
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_number) {
   if (get_bit(mmu->LCDC, 4) == 1) {
-    return (uint8_t)TILE_8000 + (tile_number * 16);
+    return (uint16_t)TILE_8000 + (tile_number * 16);
   }
 
-  return (uint8_t)TILE_8800 + ((int8_t)tile_number * 16);
+  return (uint16_t)TILE_8800 + ((int8_t)tile_number * 16);
 }
 
 uint8_t get_color_idx(uint8_t low, uint8_t high, int bit_idx) {
