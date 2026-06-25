@@ -136,9 +136,13 @@ struct MMU {
 
   // ppu registers
   uint8_t STAT;
+
+  bool prev_stat_line;
+
   uint8_t SCX;
   uint8_t SCY;
   uint8_t LY;
+  uint8_t LYC;
   uint8_t LCDC;
   uint8_t BGP;
   uint8_t OBP0;
@@ -183,6 +187,7 @@ void handle_dma_write(MMU *mmu, uint8_t offset, uint8_t data);
 SPRITE *handle_oam_read(MMU *mmu, uint8_t offset);
 
 int ram_size_bytes(enum RAM_SIZE size);
+bool ly_eq_lyc(MMU *mmu);
 
 // depending on the rom size, a certain number of the upper bits are ignored
 // when selecting the bank number

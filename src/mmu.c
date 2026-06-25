@@ -2,6 +2,8 @@
 #include "boy.h"
 #include "common.h"
 #include "log.h"
+#include "ppu.h"
+#include "utils.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,6 +93,12 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
     data = handle_cart_read(&boy->mmu, address);
 
   } else if (address >= VRAM_START && address <= VRAM_END) {
+
+    if (boy->ppu.ppu_mode == PPU_MODE_3) {
+      log_warn("VRAM read violation at 0x%04X during PPU drawing", address);
+      return 0xFF;
+    }
+
     data = boy->mmu.vram[address - VRAM_START];
 
   } else if (address >= SRAM_START && address <= SRAM_END) {
@@ -105,9 +113,15 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
     log_warn("ECHO RAM handler for address 0x%04X not implemented", address);
   } else if (address >= OAM_START && address <= OAM_END) {
     // handle oam
+
+    if (!(boy->ppu.ppu_mode == PPU_MODE_0) ||
+        !(boy->ppu.ppu_mode == PPU_MODE_1)) {
+      log_warn("OAM read violation at 0x%04X during PPU mode 2 or 3");
+      return 0xFF;
+    }
+
     data = ((uint8_t *)boy->mmu.oam)[address - OAM_START];
 
-    log_warn("OAM handler for address 0x%04X not implemented", address);
   } else if (address >= 0xFEA0 && address <= 0xFEFF) {
     // use of this area prohibited
     log_warn("prohibited area handler for address 0x%04X not implemented",
@@ -124,7 +138,6 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
     // interrupt enable
     data = boy->mmu.IE;
   }
-  // all reads take 1 cycle so tick timer here
 
   return data;
 }
@@ -148,6 +161,11 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
 
   } else if (address >= VRAM_START && address <= VRAM_END) {
     // handle vram writes here
+    if (boy->ppu.ppu_mode == PPU_MODE_3) {
+      log_warn("VRAM write violation at 0x%04X during PPU drawing", address);
+      return;
+    }
+
     boy->mmu.vram[address - VRAM_START] = data;
 
   } else if (address >= SRAM_START && address <= SRAM_END) {
@@ -161,6 +179,12 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
     // handle echo ram
     // technically use of this area is prohibted so no need to emulate
   } else if (address >= OAM_START && address <= OAM_END) {
+
+    if (!(boy->ppu.ppu_mode == PPU_MODE_0) ||
+        !(boy->ppu.ppu_mode == PPU_MODE_1)) {
+      log_warn("OAM write violation at 0x%04X during PPU mode 2/3");
+      return;
+    }
 
     ((uint8_t *)boy->mmu.oam)[address - OAM_START] = data;
 
@@ -430,9 +454,15 @@ void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
     // handle lcd control, status, position, scrolling and paletters
     log_warn("only dma supported for address 0x%04X", address);
 
-    if (address == 0xFF46) {
+    switch (address) {
+    case 0xFF41:
+      boy->mmu.STAT = data;
+      break;
+
+    case 0xFF46:
       boy->mmu.enabling_dma = true;
       boy->mmu.dma_src = (data & 0xDF) << 8;
+      break;
     }
   }
 }
@@ -636,4 +666,14 @@ uint8_t rom_mask(enum ROM_SIZE size) {
 
 uint8_t read_byte_no_tick(BOY *boy, uint16_t address) {
   return read_byte(boy, address);
+}
+
+bool ly_eq_lyc(MMU *mmu) {
+  if (mmu->LY == mmu->LYC) {
+    set_bit(&mmu->STAT, 2);
+    return true;
+  } else {
+    clear_bit(&mmu->STAT, 2);
+    return false;
+  }
 }

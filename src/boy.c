@@ -31,11 +31,11 @@ void init_components(BOY *boy) {
 // called every M cycle ( 4 T Cycles )
 void tick(BOY *boy, int cycles) {
   increment_timers(&boy->timers, cycles);
-  // also tick the ppu here too
   handle_dma(boy);
 
+  // also tick the ppu here too
   for (int i = 0; i < 4; i++) {
-    handle_ppu(boy, 1);
+    tick_ppu(boy);
   }
 };
 

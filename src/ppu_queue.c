@@ -1,15 +1,16 @@
 #include "ppu_queue.h"
 #include <stdlib.h>
+#include <string.h>
 
-void ppu_queue_init(PPU_QUEUE *q, size_t cap){
-  q->queue = malloc(sizeof(void*) * cap);
+void ppu_queue_init(PPU_QUEUE *q, size_t cap) {
+  q->queue = malloc(sizeof(void *) * cap);
   q->cap = cap;
   q->head = 0;
   q->tail = 0;
 }
 
-bool ppu_queue_enqueue(PPU_QUEUE *q, void *pixel){
-  if(ppu_queue_is_full(q)) {
+bool ppu_queue_enqueue(PPU_QUEUE *q, void *pixel) {
+  if (ppu_queue_is_full(q)) {
     return false;
   }
 
@@ -17,8 +18,8 @@ bool ppu_queue_enqueue(PPU_QUEUE *q, void *pixel){
   return true;
 }
 
-void* ppu_queue_dequeue(PPU_QUEUE *q){
-  if(ppu_queue_is_empty(q)) {
+void *ppu_queue_dequeue(PPU_QUEUE *q) {
+  if (ppu_queue_is_empty(q)) {
     return NULL;
   }
 
@@ -29,6 +30,10 @@ bool ppu_queue_is_full(PPU_QUEUE *q) {
   return ((q->tail + 1) % q->cap) == q->head;
 }
 
-bool ppu_queue_is_empty(PPU_QUEUE *q) {
-  return q->tail == 0;
+bool ppu_queue_is_empty(PPU_QUEUE *q) { return q->tail == 0; }
+
+void ppu_queue_reset(PPU_QUEUE *q) {
+  memset(q->queue, 0, q->cap);
+  q->head = 0;
+  q->tail = 0;
 }

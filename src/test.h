@@ -15,6 +15,7 @@ void test_dma_timing();
 void test_ppu();
 void test_ppu_transitions();
 void test_ppu_single_oam_scan();
+void test_ppu_lyc_interrupt();
 
 // sprite fetch tests
 void test_sprites_mixed_validity();
@@ -24,6 +25,7 @@ void test_sprites_x_zero_filtered();
 // sprite draw tests
 void test_background_tile_fetch();
 void test_ppu_mcycle_mode3();
+void test_scanline_start_delay();
 
 // write test the verifies window is fetched when it should be
 void test_fetch_window();

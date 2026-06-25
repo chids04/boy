@@ -212,6 +212,10 @@ void test_ppu_single_oam_scan() {
   assert(boy->ppu.sprite_buffer[1].flags == sprite2.flags);
 }
 
+void test_ppu_lyc_interrupt() {
+  // set LY == LYC and ensure stat interrupt gets requested on the correct line
+}
+
 // Helper: scan all 40 OAM entries (20 calls of handle_oam_scan, each scans 2
 // entries)
 void scan_full_oam(BOY *boy) {
@@ -378,35 +382,35 @@ void test_background_tile_fetch() {
   mode3_init(&boy->ppu);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
 
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_num == 0);
 
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_num == 1);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_LOW);
 
   // computation always happens on second tick;
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_LOW);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_low == 0);
 
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_low == tile_data[0]);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_HIGH);
 
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_HIGH);
 
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.tile_high == tile_data[1]);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
 
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
 
   // loop back to starting state
-  handle_ppu(boy, 1);
+  tick_ppu(boy);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
 
   // assert 8 pixels in fifo
@@ -434,6 +438,28 @@ void test_ppu_mcycle_mode3() {
   // 1 M-Cycle is 4 dots (PPU M-Cycles)
   // mode 3 should be on the third step (fetching tile high byte);
   assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_HIGH);
+}
+
+void test_scanline_start_delay() {
+  BOY *boy = test_init();
+
+  mode3_init(&boy->ppu);
+
+  for (int i = 0; i < 6; i++) {
+    tick_ppu(boy);
+  }
+
+  // assert that it restarted
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_TILE_NUM);
+
+  // ensure ppu queue is empty
+  assert(ppu_queue_is_empty(&boy->ppu.background_fifo));
+
+  for (int i = 0; i < 6; i++) {
+    tick_ppu(boy);
+  }
+
+  assert(boy->ppu.ppu_state.PPU_DRAW.mode_3_state == MODE_3_FIFO);
 }
 
 void test_queue_full() {

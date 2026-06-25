@@ -12,14 +12,11 @@
 
 int main() {
   // test_ppu_transitions();
-  test_ppu_mcycle_mode3();
-  test_background_tile_fetch();
-  return 0;
-
-  test_queue_full();
-  test_queue_order();
-
-  return 0;
+  //  test_ppu_mcycle_mode3();
+  //  test_background_tile_fetch();
+  //  test_queue_full();
+  //  test_queue_order();
+  // test_scanline_start_delay();
 
   FILE *f = fopen("./cpu_instrs/cpu_instrs.gb", "r");
 
@@ -54,14 +51,17 @@ int main() {
   const int WINDOW_HEIGHT = 700;
 
   // stick to original 10:9 aspect ratio of the gameboy
-  const int SCREEN_WIDTH = 400;
-  const int SCREEN_HEIGHT = 360;
+  const int SCREEN_WIDTH = 160;
+  const int SCREEN_HEIGHT = 144;
 
   // -10 for some padding
   const int DEBUG_PANEL_WIDTH = WINDOW_WIDTH - 10;
   const int DEBUG_PANEL_HEIGHT = 200;
 
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "boy");
+
+  Image img = GenImageColor(SCREEN_WIDTH, SCREEN_HEIGHT, BLACK);
+  Texture2D screen_tex = LoadTextureFromImage(img);
 
   // skip the bootrom for now
   BOY boy;
@@ -73,12 +73,14 @@ int main() {
   while (!WindowShouldClose()) {
     step_boy(&boy);
 
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
+    if (boy.event & EVENT_FRAME_READY) {
+    }
 
-    // placeholder for the gameboy display
-    DrawRectangle(WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2, 10, SCREEN_WIDTH,
-                  SCREEN_HEIGHT, BLACK);
+    BeginDrawing();
+    ClearBackground(WHITE);
+
+    DrawTexture(screen_tex, WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2, 10, WHITE);
+
     DrawRectangleLines(WINDOW_WIDTH / 2 - DEBUG_PANEL_WIDTH / 2,
                        SCREEN_HEIGHT + 15, DEBUG_PANEL_WIDTH,
                        DEBUG_PANEL_HEIGHT, PINK);

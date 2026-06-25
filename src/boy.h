@@ -11,14 +11,16 @@ struct BOY {
   MMU mmu;
   PPU ppu;
   TIMERS timers;
+
+  BoyEvent event;
 };
 
 typedef enum {
-    VBLANK,
-    LCD,
-    TIMER,
-    SERIAL,
-    JOYPAD,
+  VBLANK,
+  LCD,
+  TIMER,
+  SERIAL,
+  JOYPAD,
 } INTERRUPTS;
 
 void load_rom(BOY *boy, uint8_t *rom);

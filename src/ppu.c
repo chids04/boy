@@ -18,12 +18,20 @@ void init_ppu(PPU *ppu) {
   ppu->sprite_buffer_offset = 0;
   ppu->pixel_fetcher.x_offset = 0;
   ppu->pixel_fetcher.state = PixelFetcher_BG;
+  ppu->vblank_ended = false;
 
   ppu_queue_init(&ppu->background_fifo, FIFO_SIZE);
   ppu_queue_init(&ppu->sprite_fifo, FIFO_SIZE);
 }
+void mode2_init(PPU *ppu) {
+  ppu->ppu_mode = PPU_MODE_2;
+  ppu->oam_offset = 0;
+  memset(ppu->sprite_buffer, 0, sizeof(SPRITE) * 10);
+  ppu->sprite_buffer_offset = 0;
+}
 
 void mode3_init(PPU *ppu) {
+  ppu->dots = 0;
   ppu->ppu_mode = PPU_MODE_3;
   ppu->ppu_state.PPU_DRAW.mode_3_state = MODE_3_TILE_NUM;
   ppu->ppu_state.PPU_DRAW.tile_low = 0;
@@ -31,46 +39,112 @@ void mode3_init(PPU *ppu) {
   ppu->ppu_state.PPU_DRAW.tile_address = 0;
   ppu->ppu_state.PPU_DRAW.scx_delay = 0;
   ppu->ppu_state.PPU_DRAW.dot_delay = 0;
+  ppu->ppu_state.PPU_DRAW.scanline_start = true;
+
+  // init the pixel fetcher
+  ppu->pixel_fetcher.x_offset = 0;
+  ppu->pixel_fetcher.state = PixelFetcher_BG;
+  ppu_queue_reset(&ppu->background_fifo);
+  ppu_queue_reset(&ppu->sprite_fifo);
 
   // each step of pixel fetching takes two steps
   // this variable gets decremented each call to hanlde_ppu_draw()
   // cycle 1 = 1 - 1 = 0, do no work
   // cycle 2 = 0, do fetcher work so it's ready for the 3rd cycle, reset cycles
-  // remaining, update fetcher state cycle 3 = work from prev cycle availiable
-  // by cycle 3
   reset_fetcher_cycles(ppu);
 }
 
 void reset_fetcher_cycles(PPU *ppu) { ppu->pixel_fetcher.cycles_remaining = 1; }
 
 // called every M cycle ( 4 T Cycles )
-void handle_ppu(BOY *boy, int dots) {
-  boy->ppu.dots += dots;
+void tick_ppu(BOY *boy) {
+  boy->ppu.dots += 1;
+  // update the state bits in the stat register
+
+  set_ppu_stat_bits(&boy->mmu, boy->ppu.ppu_mode);
+  check_stat_line(boy);
+
+  check_vblank(boy);
+
+  switch (boy->ppu.ppu_mode) {
+  case PPU_MODE_0:
+    handle_ppu_hblank(boy);
+    return;
+  case PPU_MODE_1:
+    handle_ppu_vblank(boy);
+    return;
+  case PPU_MODE_2:
+    handle_oam_scan(boy);
+    return;
+  case PPU_MODE_3:
+    handle_ppu_hblank(boy);
+    return;
+  }
 
   if (boy->ppu.ppu_mode == PPU_MODE_2) {
     handle_oam_scan(boy);
   } else if (boy->ppu.ppu_mode == PPU_MODE_3) {
     handle_ppu_draw(boy);
   } else if (boy->ppu.ppu_mode == PPU_MODE_0) {
+    handle_ppu_hblank(boy);
   }
-
-  set_mode(&boy->ppu);
 }
 
-void set_mode(PPU *ppu) {
-  if (ppu->ppu_mode == PPU_MODE_2 && ppu->dots == 80) {
-    // init ppu mode 3 state
-    mode3_init(ppu);
-    ppu->dots = 0;
-  } else if ((ppu->ppu_mode == PPU_MODE_3) &&
-             (ppu->dots == 172 + ppu->ppu_state.PPU_DRAW.dot_delay)) {
-    ppu->ppu_mode = PPU_MODE_0;
-    ppu->dots = 0;
+void set_ppu_stat_bits(MMU *mmu, PPU_MODE mode) {
+  switch (mode) {
 
-  } else if ((ppu->ppu_mode == PPU_MODE_0) &&
-             (ppu->dots == 87 - ppu->ppu_state.PPU_DRAW.dot_delay)) {
-    ppu->ppu_mode = PPU_MODE_1;
-    ppu->dots = 0;
+  case PPU_MODE_0:
+    mmu->STAT |= 0b00;
+    break;
+  case PPU_MODE_1:
+    mmu->STAT |= 0b01;
+    break;
+
+  case PPU_MODE_2:
+    mmu->STAT |= 0b10;
+    break;
+
+  case PPU_MODE_3:
+    mmu->STAT |= 0b11;
+    break;
+  }
+}
+
+void check_stat_line(BOY *boy) {
+  bool stat_line =
+      (is_mode(&boy->ppu, PPU_MODE_0) && get_bit(boy->mmu.STAT, 3)) ||
+      (is_mode(&boy->ppu, PPU_MODE_1) && get_bit(boy->mmu.STAT, 4)) ||
+      (is_mode(&boy->ppu, PPU_MODE_2) && get_bit(boy->mmu.STAT, 5)) ||
+      (get_bit(boy->mmu.STAT, 6) && ly_eq_lyc(&boy->mmu));
+
+  // stat interrupt occurs on the rising edge,
+  if (!boy->mmu.prev_stat_line && stat_line) {
+    // request stat interrupt here
+    set_bit(&boy->mmu.IF, 1);
+  }
+
+  boy->mmu.prev_stat_line = stat_line;
+}
+
+void check_vblank(BOY *boy) {
+
+  // sets the event to signal to ui to draw the screen
+  // done at the start of each scanline
+  if (is_mode(&boy->ppu, PPU_MODE_1)) {
+    boy->event |= EVENT_FRAME_READY;
+  }
+}
+
+bool is_mode(PPU *ppu, PPU_MODE mode) {
+  switch (mode) {
+  case PPU_MODE_0:
+    return ppu->ppu_mode == PPU_MODE_0;
+  case PPU_MODE_1:
+    return ppu->ppu_mode == PPU_MODE_1;
+  case PPU_MODE_2:
+    return ppu->ppu_mode == PPU_MODE_2;
+  case PPU_MODE_3:
+    return ppu->ppu_mode == PPU_MODE_3;
   }
 }
 
@@ -91,6 +165,10 @@ void handle_oam_scan(BOY *boy) {
   if (to_sprite_buffer(boy, entry2)) {
     boy->ppu.sprite_buffer[boy->ppu.sprite_buffer_offset] = *entry2;
     boy->ppu.sprite_buffer_offset++;
+  }
+
+  if (boy->ppu.dots == 80) {
+    mode3_init(&boy->ppu);
   }
 }
 
@@ -114,7 +192,6 @@ uint8_t sprite_height(MMU *mmu) {
 
 void handle_ppu_draw(BOY *boy) {
   // push pixels in queue
-  mode_3_push(boy);
 
   if (boy->ppu.pixel_fetcher.cycles_remaining > 0) {
     boy->ppu.pixel_fetcher.cycles_remaining--;
@@ -141,6 +218,43 @@ void handle_ppu_draw(BOY *boy) {
       reset_fetcher_cycles(&boy->ppu);
       break;
     }
+  }
+
+  // push pixels to lcd,
+  mode_3_push(boy);
+
+  // return new ppu state
+  if (boy->ppu.pixel_fetcher.x_offset == 160) {
+    boy->ppu.ppu_mode = PPU_MODE_0;
+
+    // hblank pads to duration of a scanline to 456 dots
+    // dot counter gets reset at start of mode 3
+    // mode 2 is 80 dots long
+    // hblank is the remaining
+    boy->ppu.ppu_state.PPU_HBLANK.hblank_len = 456 - boy->ppu.dots - 80;
+    boy->ppu.dots = 0;
+  }
+}
+
+void handle_ppu_hblank(BOY *boy) {
+
+  if (boy->ppu.dots == boy->ppu.ppu_state.PPU_HBLANK.hblank_len &&
+      boy->mmu.LY == 144) {
+    boy->ppu.dots = 0;
+    boy->ppu.ppu_mode = PPU_MODE_1;
+  } else if (boy->ppu.dots == boy->ppu.ppu_state.PPU_HBLANK.hblank_len) {
+    boy->mmu.LY += 1;
+    mode2_init(&boy->ppu);
+  }
+}
+
+void handle_ppu_vblank(BOY *boy) {
+  if (boy->ppu.dots % 456 == 0) {
+    boy->mmu.LY += 1;
+  }
+
+  if (boy->ppu.dots == 4560) {
+    mode2_init(&boy->ppu);
   }
 }
 
@@ -235,6 +349,12 @@ MODE_3_STATE mode_3_tile_high(BOY *boy) {
   boy->ppu.ppu_state.PPU_DRAW.tile_high =
       read_byte_no_tick(boy, boy->ppu.ppu_state.PPU_DRAW.tile_address + 1);
 
+  // restart these steps at the start of the scanline
+  if (boy->ppu.ppu_state.PPU_DRAW.scanline_start) {
+    boy->ppu.ppu_state.PPU_DRAW.scanline_start = false;
+    return MODE_3_TILE_NUM;
+  }
+
   return MODE_3_FIFO;
 }
 
@@ -279,6 +399,37 @@ void mode_3_push(BOY *boy) {
 
   // dequeue a background pixel;
   BGWinFifoEntry *entry = ppu_queue_dequeue(&boy->ppu.background_fifo);
+
+  // check for pixel 160 after dequeue
+  if (boy->ppu.pixel_fetcher.x_offset == 160) {
+    return;
+  }
+
+  if (entry != NULL) {
+  }
+}
+
+// for now this only handles bg color palette but will be expanded to handle
+// sprites too
+BoyColor get_color_value(MMU *mmu, uint8_t color_idx) {
+  uint8_t color_val;
+
+  switch (color_idx) {
+  case 0:
+    color_val = get_bit_range(mmu->BGP, 1, 0);
+    break;
+  case 1:
+    color_val = get_bit_range(mmu->BGP, 3, 2);
+    break;
+  case 2:
+    color_val = get_bit_range(mmu->BGP, 5, 4);
+    break;
+  case 3:
+    color_val = get_bit_range(mmu->BGP, 7, 6);
+    break;
+  }
+
+  switch (color_val) { case 0: }
 }
 
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_number) {
