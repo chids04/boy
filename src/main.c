@@ -73,6 +73,9 @@ int main() {
   while (!WindowShouldClose()) {
     step_boy(&boy);
 
+    // update texture with ppu framebuffer
+    // still need to wire up sending the frames to the buffer and setting the
+    // colour correctly
     if (boy.event & EVENT_FRAME_READY) {
     }
 

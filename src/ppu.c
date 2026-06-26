@@ -80,14 +80,6 @@ void tick_ppu(BOY *boy) {
     handle_ppu_hblank(boy);
     return;
   }
-
-  if (boy->ppu.ppu_mode == PPU_MODE_2) {
-    handle_oam_scan(boy);
-  } else if (boy->ppu.ppu_mode == PPU_MODE_3) {
-    handle_ppu_draw(boy);
-  } else if (boy->ppu.ppu_mode == PPU_MODE_0) {
-    handle_ppu_hblank(boy);
-  }
 }
 
 void set_ppu_stat_bits(MMU *mmu, PPU_MODE mode) {
@@ -239,21 +231,26 @@ void handle_ppu_draw(BOY *boy) {
 void handle_ppu_hblank(BOY *boy) {
 
   if (boy->ppu.dots == boy->ppu.ppu_state.PPU_HBLANK.hblank_len &&
-      boy->mmu.LY == 144) {
+      boy->mmu.LY == 143) {
     boy->ppu.dots = 0;
+    boy->mmu.LY += 1;
     boy->ppu.ppu_mode = PPU_MODE_1;
   } else if (boy->ppu.dots == boy->ppu.ppu_state.PPU_HBLANK.hblank_len) {
+    boy->ppu.dots = 0;
     boy->mmu.LY += 1;
     mode2_init(&boy->ppu);
   }
 }
 
 void handle_ppu_vblank(BOY *boy) {
-  if (boy->ppu.dots % 456 == 0) {
+  // increment LY every 456 cycles apart from cycle 0
+  if (boy->ppu.dots != 0 && boy->ppu.dots % 456 == 0) {
     boy->mmu.LY += 1;
   }
 
+  // could also just check the scanline number too
   if (boy->ppu.dots == 4560) {
+
     mode2_init(&boy->ppu);
   }
 }
