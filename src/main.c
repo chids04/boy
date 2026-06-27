@@ -1,14 +1,15 @@
 #include "boy.h"
 #include "common.h"
-#include "raylib.h"
+// #include "raylib.h"
+#include "log.h"
 #include "test.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define RAYGUI_IMPLEMENTATION
-#include "raygui.h"
+// #define RAYGUI_IMPLEMENTATION
+// #include "raygui.h"
 
 int main() {
   // test_ppu_transitions();
@@ -17,7 +18,7 @@ int main() {
   //  test_queue_full();
   //  test_queue_order();
   // test_scanline_start_delay();
-
+  // test_ppu_colors();
   FILE *f = fopen("./cpu_instrs/cpu_instrs.gb", "r");
 
   if (f == NULL) {
@@ -44,58 +45,68 @@ int main() {
     return 1;
   }
 
-  fclose(f);
-  printf("Successfully loaded %ld bytes.\n", f_size);
-
-  const int WINDOW_WIDTH = 800;
-  const int WINDOW_HEIGHT = 700;
-
-  // stick to original 10:9 aspect ratio of the gameboy
-  const int SCREEN_WIDTH = 160;
-  const int SCREEN_HEIGHT = 144;
-
-  // -10 for some padding
-  const int DEBUG_PANEL_WIDTH = WINDOW_WIDTH - 10;
-  const int DEBUG_PANEL_HEIGHT = 200;
-
-  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "boy");
-
-  Image img = GenImageColor(SCREEN_WIDTH, SCREEN_HEIGHT, BLACK);
-  Texture2D screen_tex = LoadTextureFromImage(img);
-
-  // skip the bootrom for now
   BOY boy;
   load_rom(&boy, rom);
   init_components(&boy);
 
-  log_state(&boy);
-
-  while (!WindowShouldClose()) {
+  while (1) {
     step_boy(&boy);
-
-    // update texture with ppu framebuffer
-    // still need to wire up sending the frames to the buffer and setting the
-    // colour correctly
-    if (boy.event & EVENT_FRAME_READY) {
-    }
-
-    BeginDrawing();
-    ClearBackground(WHITE);
-
-    DrawTexture(screen_tex, WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2, 10, WHITE);
-
-    DrawRectangleLines(WINDOW_WIDTH / 2 - DEBUG_PANEL_WIDTH / 2,
-                       SCREEN_HEIGHT + 15, DEBUG_PANEL_WIDTH,
-                       DEBUG_PANEL_HEIGHT, PINK);
-
-    GuiLabel((Rectangle){0, 0, 100, 20}, "test");
-
-    // DrawRectangle(225, 132, 24, 84, BLACK);
-    // DrawRectangle(195, 161, 84, 25, BLACK);
-    EndDrawing();
   }
 
-  CloseWindow();
+  fclose(f);
+  printf("Successfully loaded %ld bytes.\n", f_size);
+
+  // const int WINDOW_WIDTH = 800;
+  // const int WINDOW_HEIGHT = 700;
+  //
+  // // stick to original 10:9 aspect ratio of the gameboy
+  // const int SCREEN_WIDTH = 160;
+  // const int SCREEN_HEIGHT = 144;
+  //
+  // // -10 for some padding
+  // const int DEBUG_PANEL_WIDTH = WINDOW_WIDTH - 10;
+  // const int DEBUG_PANEL_HEIGHT = 200;
+  //
+  // InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "boy");
+  //
+  // Image img = GenImageColor(SCREEN_WIDTH, SCREEN_HEIGHT, BLACK);
+  // Texture2D screen_tex = LoadTextureFromImage(img);
+  //
+  // // skip the bootrom for now
+  // BOY boy;
+  // load_rom(&boy, rom);
+  // init_components(&boy);
+  //
+  // log_state(&boy);
+  //
+  // while (!WindowShouldClose()) {
+  //   step_boy(&boy);
+  //
+  //   // update texture with ppu framebuffer
+  //   // still need to wire up sending the frames to the buffer and setting the
+  //   // colour correctly
+  //   if (boy.event & EVENT_FRAME_READY) {
+  //     UpdateTexture(screen_tex, &boy.ppu.framebuffer);
+  //     boy.event &= ~EVENT_FRAME_READY;
+  //   }
+  //
+  //   BeginDrawing();
+  //   ClearBackground(WHITE);
+  //
+  //   DrawTexture(screen_tex, WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2, 10, WHITE);
+  //
+  //   DrawRectangleLines(WINDOW_WIDTH / 2 - DEBUG_PANEL_WIDTH / 2,
+  //                      SCREEN_HEIGHT + 15, DEBUG_PANEL_WIDTH,
+  //                      DEBUG_PANEL_HEIGHT, PINK);
+  //
+  //   GuiLabel((Rectangle){0, 0, 100, 20}, "test");
+  //
+  //   // DrawRectangle(225, 132, 24, 84, BLACK);
+  //   // DrawRectangle(195, 161, 84, 25, BLACK);
+  //   EndDrawing();
+  // }
+  //
+  // CloseWindow();
 
   free(rom);
 

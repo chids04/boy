@@ -20,6 +20,7 @@ void close_log_file(void) {
 void load_rom(BOY *boy, uint8_t *rom) { boy->mmu = *init_mmu(rom); }
 
 void init_components(BOY *boy) {
+
   uint8_t header_checksum = rom_header_checksum(&boy->mmu);
   init_cpu(&boy->cpu, header_checksum);
   init_ppu(&boy->ppu);
@@ -34,9 +35,11 @@ void tick(BOY *boy, int cycles) {
   handle_dma(boy);
 
   // also tick the ppu here too
+  log_set_quiet(false);
   for (int i = 0; i < 4; i++) {
     tick_ppu(boy);
   }
+  log_set_quiet(true);
 };
 
 void handle_dma(BOY *boy) {
@@ -77,8 +80,6 @@ void step_boy(BOY *boy) {
 }
 
 void check_interrupts(BOY *boy) {
-  log_set_level(1);
-
   // bitwise & will set the bit 1 the interrupt has been requested and enabled
   uint8_t pending_interrupts = boy->mmu.IF & boy->mmu.IE;
 

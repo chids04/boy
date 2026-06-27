@@ -20,8 +20,12 @@ void init_ppu(PPU *ppu) {
   ppu->pixel_fetcher.state = PixelFetcher_BG;
   ppu->vblank_ended = false;
 
+  ppu->pallette_colors = (BoyColor *)CLASSIC_DMG_COLOR;
+
   ppu_queue_init(&ppu->background_fifo, FIFO_SIZE);
   ppu_queue_init(&ppu->sprite_fifo, FIFO_SIZE);
+
+  log_info("PPU initalised, entering OAM search");
 }
 void mode2_init(PPU *ppu) {
   ppu->ppu_mode = PPU_MODE_2;
@@ -59,11 +63,14 @@ void reset_fetcher_cycles(PPU *ppu) { ppu->pixel_fetcher.cycles_remaining = 1; }
 // called every M cycle ( 4 T Cycles )
 void tick_ppu(BOY *boy) {
   boy->ppu.dots += 1;
-  // update the state bits in the stat register
 
+  // update the state bits in the stat register
   set_ppu_stat_bits(&boy->mmu, boy->ppu.ppu_mode);
+
+  // check stat register for any interrupts
   check_stat_line(boy);
 
+  // check if we are at vblank to create vblank event for ui to refresh display
   check_vblank(boy);
 
   switch (boy->ppu.ppu_mode) {
@@ -160,6 +167,10 @@ void handle_oam_scan(BOY *boy) {
   }
 
   if (boy->ppu.dots == 80) {
+
+    log_info("PPU prev mode: OAM scan, PPU current mode: Draw, dots taken: %d",
+             boy->ppu.dots);
+
     mode3_init(&boy->ppu);
   }
 }
@@ -215,8 +226,9 @@ void handle_ppu_draw(BOY *boy) {
   // push pixels to lcd,
   mode_3_push(boy);
 
-  // return new ppu state
   if (boy->ppu.pixel_fetcher.x_offset == 160) {
+    log_info("PPU prev mode: Draw, PPU current mode: HBlank, dots taken: %d",
+             boy->ppu.dots);
     boy->ppu.ppu_mode = PPU_MODE_0;
 
     // hblank pads to duration of a scanline to 456 dots
@@ -224,18 +236,27 @@ void handle_ppu_draw(BOY *boy) {
     // mode 2 is 80 dots long
     // hblank is the remaining
     boy->ppu.ppu_state.PPU_HBLANK.hblank_len = 456 - boy->ppu.dots - 80;
+
+    log_info("Length of HBlank will be %d dots",
+             boy->ppu.ppu_state.PPU_HBLANK.hblank_len);
     boy->ppu.dots = 0;
   }
 }
 
 void handle_ppu_hblank(BOY *boy) {
-
   if (boy->ppu.dots == boy->ppu.ppu_state.PPU_HBLANK.hblank_len &&
       boy->mmu.LY == 143) {
+
+    log_info("PPU prev mode: HBlank, PPU current mode: VBlank, dots taken: %d",
+             boy->ppu.dots);
+
     boy->ppu.dots = 0;
     boy->mmu.LY += 1;
     boy->ppu.ppu_mode = PPU_MODE_1;
   } else if (boy->ppu.dots == boy->ppu.ppu_state.PPU_HBLANK.hblank_len) {
+    log_info(
+        "PPU prev mode: HBlank, PPU current mode: OAM scan, dots taken: %d",
+        boy->ppu.dots);
     boy->ppu.dots = 0;
     boy->mmu.LY += 1;
     mode2_init(&boy->ppu);
@@ -397,36 +418,34 @@ void mode_3_push(BOY *boy) {
   // dequeue a background pixel;
   BGWinFifoEntry *entry = ppu_queue_dequeue(&boy->ppu.background_fifo);
 
-  // check for pixel 160 after dequeue
-  if (boy->ppu.pixel_fetcher.x_offset == 160) {
-    return;
-  }
+  // todo: if sprite, then ensure x < 160 else skip pixel
+  BoyColor color = get_color_value(boy, entry->color_idx);
+  boy->ppu.framebuffer[boy->mmu.LY][boy->ppu.pixel_fetcher.x_offset] = color;
 
-  if (entry != NULL) {
-  }
+  boy->ppu.pixel_fetcher.x_offset += 1;
 }
 
 // for now this only handles bg color palette but will be expanded to handle
 // sprites too
-BoyColor get_color_value(MMU *mmu, uint8_t color_idx) {
-  uint8_t color_val;
+BoyColor get_color_value(BOY *boy, uint8_t color_idx) {
+  uint8_t color_val_idx;
 
   switch (color_idx) {
   case 0:
-    color_val = get_bit_range(mmu->BGP, 1, 0);
+    color_val_idx = get_bit_range(boy->mmu.BGP, 1, 0);
     break;
   case 1:
-    color_val = get_bit_range(mmu->BGP, 3, 2);
+    color_val_idx = get_bit_range(boy->mmu.BGP, 3, 2);
     break;
   case 2:
-    color_val = get_bit_range(mmu->BGP, 5, 4);
+    color_val_idx = get_bit_range(boy->mmu.BGP, 5, 4);
     break;
   case 3:
-    color_val = get_bit_range(mmu->BGP, 7, 6);
+    color_val_idx = get_bit_range(boy->mmu.BGP, 7, 6);
     break;
   }
 
-  switch (color_val) { case 0: }
+  return boy->ppu.pallette_colors[color_val_idx];
 }
 
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_number) {

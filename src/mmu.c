@@ -75,8 +75,6 @@ uint8_t rom_header_checksum(MMU *mmu) {
 }
 
 uint8_t read_byte(BOY *boy, uint16_t address) {
-  log_set_level(1);
-
   // during dma, only hram area is readable
   uint8_t data = 0xFF;
 

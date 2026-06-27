@@ -14,3 +14,5 @@ ppu is ticked 4 times in side tick()
 
 we are working on the background fifo right now,
 also most done with this, just need to sort out state transitions after this.
+
+got the state transitions done, now the ppu is stuck in draw mode so need to figure out why for that

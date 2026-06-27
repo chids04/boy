@@ -216,6 +216,29 @@ void test_ppu_lyc_interrupt() {
   // set LY == LYC and ensure stat interrupt gets requested on the correct line
 }
 
+void test_ppu_colors() {
+  BOY *boy = test_init();
+
+  // id0 = white
+  // id1 = light grey
+  // id2 = dark grey black
+  // id3 = black
+
+  boy->mmu.BGP = 0b11100100;
+
+  BoyColor color = get_color_value(boy, 0);
+  assert(memcmp(&color, &CLASSIC_DMG_COLOR[0], sizeof(BoyColor)) == 0);
+
+  BoyColor color1 = get_color_value(boy, 1);
+  assert(memcmp(&color1, &CLASSIC_DMG_COLOR[1], sizeof(BoyColor)) == 0);
+
+  BoyColor color2 = get_color_value(boy, 2);
+  assert(memcmp(&color2, &CLASSIC_DMG_COLOR[2], sizeof(BoyColor)) == 0);
+
+  BoyColor color3 = get_color_value(boy, 3);
+  assert(memcmp(&color3, &CLASSIC_DMG_COLOR[3], sizeof(BoyColor)) == 0);
+}
+
 // Helper: scan all 40 OAM entries (20 calls of handle_oam_scan, each scans 2
 // entries)
 void scan_full_oam(BOY *boy) {
@@ -227,9 +250,6 @@ void scan_full_oam(BOY *boy) {
 
 void test_sprites_x_zero_filtered() {
   BOY *boy = test_init();
-  if (boy == NULL) {
-    return;
-  }
 
   // Set up conditions for sprites to be visible by Y
   boy->mmu.LY = 20;

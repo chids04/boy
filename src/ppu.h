@@ -10,12 +10,19 @@
 
 enum TILE_ADDRESS_MODE { TILE_8000 = 0x8000, TILE_8800 = 0x9000 };
 
-typedef struct BoyColor {
-  unsigned char r; // Color red value
-  unsigned char g; // Color green value
-  unsigned char b; // Color blue value
-  unsigned char a; // Color alpha value
-} BoyColor;
+static const BoyColor CLASSIC_DMG_COLOR[4] = {
+    (BoyColor){.r = 155, .g = 188, .b = 15, .a = 255},
+    (BoyColor){.r = 139, .g = 172, .b = 15, .a = 255},
+    (BoyColor){.r = 48, .g = 98, .b = 48, .a = 255},
+    (BoyColor){.r = 15, .g = 56, .b = 15, .a = 255},
+};
+
+static const BoyColor MODERN_DMG_COLOR[4] = {
+    (BoyColor){.r = 155, .g = 188, .b = 15, .a = 255},
+    (BoyColor){.r = 139, .g = 172, .b = 15, .a = 255},
+    (BoyColor){.r = 48, .g = 98, .b = 48, .a = 255},
+    (BoyColor){.r = 15, .g = 56, .b = 15, .a = 255},
+};
 
 typedef enum PPU_MODE {
   PPU_MODE_0, // hblank
@@ -52,7 +59,8 @@ struct PPU {
 
   PPU_MODE ppu_mode;
 
-  BoyColor framebuffer[FRAMEBUFFER_SIZE];
+  BoyColor framebuffer[144][160];
+  BoyColor *pallette_colors;
 
   union {
     struct {
@@ -124,8 +132,10 @@ MODE_3_STATE mode_3_tile_low(BOY *boy);
 MODE_3_STATE mode_3_tile_high(BOY *boy);
 MODE_3_STATE mode_3_fifo(BOY *boy);
 void mode_3_push(BOY *boy);
-BoyColor get_color_value(MMU *mmu, uint8_t color_idx);
+BoyColor get_color_value(BOY *boy, uint8_t color_idx);
 
 // returns true if state machine can advance
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_num);
+
+// get the color index from
 uint8_t get_color_idx(uint8_t low, uint8_t high, int bit_idx);

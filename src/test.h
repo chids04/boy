@@ -16,6 +16,7 @@ void test_ppu();
 void test_ppu_transitions();
 void test_ppu_single_oam_scan();
 void test_ppu_lyc_interrupt();
+void test_ppu_colors();
 
 // sprite fetch tests
 void test_sprites_mixed_validity();
