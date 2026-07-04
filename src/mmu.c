@@ -93,7 +93,7 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
   } else if (address >= VRAM_START && address <= VRAM_END) {
 
     if (boy->ppu.ppu_mode == PPU_MODE_3) {
-      log_warn("VRAM read violation at 0x%04X during PPU drawing", address);
+      // log_warn("VRAM read violation at 0x%04X during PPU drawing", address);
       return 0xFF;
     }
 

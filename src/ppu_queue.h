@@ -7,6 +7,7 @@ typedef struct PPU_QUEUE {
   int cap;
   int head;
   int tail;
+  int size;
 } PPU_QUEUE;
 
 void ppu_queue_init(PPU_QUEUE *q, size_t cap);

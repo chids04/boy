@@ -36,6 +36,7 @@ typedef enum MODE_3_STATE {
   MODE_3_TILE_LOW,
   MODE_3_TILE_HIGH,
   MODE_3_FIFO,
+  MODE_3_FIFO_IDLE,
 } MODE_3_STATE;
 
 typedef struct PixelFetcher {
@@ -53,6 +54,12 @@ typedef struct PixelFetcher {
 
 struct PPU {
   long long dots;
+  int hblank_len;
+  int draw_len;
+  int total_dots;
+
+  bool dot_delay;
+  int dot_delay_len;
 
   SPRITE *sprite_buffer;
   size_t sprite_buffer_offset;
@@ -60,6 +67,8 @@ struct PPU {
   PPU_MODE ppu_mode;
 
   BoyColor framebuffer[144][160];
+  BoyColor bgMapBuffer[1024];
+
   BoyColor *pallette_colors;
 
   union {
@@ -74,6 +83,7 @@ struct PPU {
       uint8_t scx_delay;
       uint8_t dot_delay;
       bool scanline_start;
+      int repeat_count;
     } PPU_DRAW;
 
     struct {
@@ -126,13 +136,20 @@ uint8_t sprite_height(MMU *mmu);
 void mode2_init(PPU *ppu);
 void mode3_init(PPU *ppu);
 
-void reset_fetcher_cycles(PPU *ppu);
 MODE_3_STATE mode_3_tile_num(BOY *boy);
 MODE_3_STATE mode_3_tile_low(BOY *boy);
 MODE_3_STATE mode_3_tile_high(BOY *boy);
 MODE_3_STATE mode_3_fifo(BOY *boy);
 void mode_3_push(BOY *boy);
+
+// mode 3 utils
+void reset_fetcher_cycles(PPU *ppu);
 BoyColor get_color_value(BOY *boy, uint8_t color_idx);
+uint16_t get_bg_base(MMU *mmu);
+uint16_t get_window_base(BOY *boy);
+uint16_t get_bgmap_base(BOY *boy);
+uint16_t get_tile_x(BOY *boy);
+uint16_t get_tile_y(BOY *boy);
 
 // returns true if state machine can advance
 uint16_t get_tile_base_address(MMU *mmu, uint8_t tile_num);

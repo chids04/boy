@@ -76,7 +76,7 @@ void handle_dma(BOY *boy) {
 void step_boy(BOY *boy) {
   decode_instruction(boy, false);
   // handle dma transfer
-  log_state(boy);
+  // log_state(boy);
 }
 
 void check_interrupts(BOY *boy) {
