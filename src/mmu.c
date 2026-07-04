@@ -62,7 +62,13 @@ void init_hardware_registers(MMU *mmu) {
   mmu->IE = 0x00;
 
   mmu->LY = 0x00;
+  mmu->LYC = 0x00;
   mmu->LCDC = 0x91;
+  mmu->BGP = 0xFC;
+  mmu->SCX = 0x00;
+  mmu->SCY = 0x00;
+  mmu->WX = 0x00;
+  mmu->WY = 0x00;
 }
 
 uint8_t rom_header_checksum(MMU *mmu) {
@@ -82,7 +88,7 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
     data = boy->mmu.hram[address - HRAM_START];
 
   } else if (boy->mmu.dma_transfer) {
-    data = handle_dma_read(boy, boy->mmu.dma_src + boy->mmu.dma_progress);
+    data = handle_dma_read(boy, boy->mmu.DMA_SRC + boy->mmu.dma_progress);
   }
 
   else if (address >= ROM_BANK0_START && address <= ROM_BANK1_END) {
@@ -112,8 +118,7 @@ uint8_t read_byte(BOY *boy, uint16_t address) {
   } else if (address >= OAM_START && address <= OAM_END) {
     // handle oam
 
-    if (!(boy->ppu.ppu_mode == PPU_MODE_0) ||
-        !(boy->ppu.ppu_mode == PPU_MODE_1)) {
+    if (boy->ppu.ppu_mode != PPU_MODE_0 && boy->ppu.ppu_mode != PPU_MODE_1) {
       log_warn("OAM read violation at 0x%04X during PPU mode 2 or 3");
       return 0xFF;
     }
@@ -178,8 +183,7 @@ void write_byte(BOY *boy, uint16_t address, uint8_t data) {
     // technically use of this area is prohibted so no need to emulate
   } else if (address >= OAM_START && address <= OAM_END) {
 
-    if (!(boy->ppu.ppu_mode == PPU_MODE_0) ||
-        !(boy->ppu.ppu_mode == PPU_MODE_1)) {
+    if (boy->ppu.ppu_mode != PPU_MODE_0 && boy->ppu.ppu_mode != PPU_MODE_1) {
       log_warn("OAM write violation at 0x%04X during PPU mode 2/3");
       return;
     }
@@ -371,20 +375,32 @@ uint8_t handle_io_read(BOY *boy, uint16_t address) {
   } else if (address >= 0xFF40 && address <= 0xFF4B) {
     // handle lcd control, status, position, scrolling and paletters
     switch (address) {
+    case 0xFF40:
+      data = boy->mmu.LCDC;
+      break;
+
     case 0xFF41:
       data = boy->mmu.STAT;
       break;
 
     case 0xFF42:
-      data = boy->mmu.SCX;
+      data = boy->mmu.SCY;
       break;
 
     case 0xFF43:
-      data = boy->mmu.SCY;
+      data = boy->mmu.SCX;
       break;
 
     case 0xFF44:
       data = boy->mmu.LY;
+      break;
+
+    case 0xFF45:
+      data = boy->mmu.LYC;
+      break;
+
+    case 0xFF46:
+      data = boy->mmu.DMA_SRC;
       break;
 
     case 0xFF47:
@@ -400,21 +416,17 @@ uint8_t handle_io_read(BOY *boy, uint16_t address) {
       break;
 
     case 0xFF4A:
-      data = boy->mmu.WX;
+      data = boy->mmu.WY;
       break;
 
     case 0xFF4B:
-      data = boy->mmu.WY;
+      data = boy->mmu.WX;
       break;
 
     default:
       log_warn("LCD control handler for address 0x%04X not implemented",
                address);
     }
-  } else if (address == 0xFF46) {
-    // handle OAM DMA transfer here
-    log_error("OAM DMA transfer handler for address 0x%04X not implemented",
-              address);
   }
 
   return data;
@@ -453,13 +465,64 @@ void handle_io_write(BOY *boy, uint16_t address, uint8_t data) {
     log_warn("only dma supported for address 0x%04X", address);
 
     switch (address) {
+    case 0xFF40:
+      if (get_bit(boy->mmu.LCDC, 7) == 1 && get_bit(data, 7) == 0) {
+        boy->ppu.ppu_mode = PPU_MODE_0;
+        boy->ppu.dots = 0;
+        boy->mmu.LY = 0;
+        ppu_queue_reset(&boy->ppu.background_fifo);
+        ppu_queue_reset(&boy->ppu.sprite_fifo);
+      } else if (get_bit(boy->mmu.LCDC, 7) == 0 && get_bit(data, 7) == 1) {
+        boy->mmu.LY = 0;
+        mode2_init(&boy->ppu);
+      }
+
+      boy->mmu.LCDC = data;
+      break;
+
     case 0xFF41:
       boy->mmu.STAT = data;
       break;
 
+    case 0xFF42:
+      boy->mmu.SCY = data;
+      break;
+
+    case 0xFF43:
+      boy->mmu.SCX = data;
+      break;
+
+    case 0xFF44:
+      boy->mmu.LY = data;
+      break;
+
+    case 0xFF45:
+      boy->mmu.LYC = data;
+      break;
+
     case 0xFF46:
       boy->mmu.enabling_dma = true;
-      boy->mmu.dma_src = (data & 0xDF) << 8;
+      boy->mmu.DMA_SRC = (data & 0xDF) << 8;
+      break;
+
+    case 0xFF47:
+      boy->mmu.BGP = data;
+      break;
+
+    case 0xFF48:
+      boy->mmu.OBP0 = data;
+      break;
+
+    case 0xFF49:
+      boy->mmu.OBP1 = data;
+      break;
+
+    case 0xFF4A:
+      boy->mmu.WY = data;
+      break;
+
+    case 0xFF4B:
+      boy->mmu.WX = data;
       break;
     }
   }

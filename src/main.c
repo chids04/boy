@@ -52,16 +52,39 @@ int main() {
   // stick to original 10:9 aspect ratio of the gameboy
   const int SCREEN_WIDTH = 160;
   const int SCREEN_HEIGHT = 144;
-
-  // -10 for some padding
-  const int DEBUG_PANEL_WIDTH = WINDOW_WIDTH - 10;
-  const int DEBUG_PANEL_HEIGHT = 200;
+  const int BG_MAP_WIDTH = 256;
+  const int BG_MAP_HEIGHT = 256;
+  const int MAX_STEPS_PER_HOST_FRAME = 100000;
+  const float SCREEN_SCALE = 1.4f;
+  const float BG_MAP_SCALE = 1.0f;
+  const float PANEL_TOP = 38.0f;
+  const float BG_MAP_GAP = 28.0f;
+  const float SECTION_GAP = 62.0f;
 
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "boy");
 
   Image img = GenImageColor(SCREEN_WIDTH, SCREEN_HEIGHT, BLACK);
   Texture2D screen_tex = LoadTextureFromImage(img);
-  Texture2D bgmap_tex = LoadTextureFromImage(img);
+  Image bgmap_img = GenImageColor(BG_MAP_WIDTH, BG_MAP_HEIGHT, BLACK);
+  Texture2D bgmap_9800_tex = LoadTextureFromImage(bgmap_img);
+  Texture2D bgmap_9c00_tex = LoadTextureFromImage(bgmap_img);
+
+  const float scaled_screen_w = SCREEN_WIDTH * SCREEN_SCALE;
+  const float scaled_screen_h = SCREEN_HEIGHT * SCREEN_SCALE;
+  const float scaled_bg_w = BG_MAP_WIDTH * BG_MAP_SCALE;
+  const float scaled_bg_h = BG_MAP_HEIGHT * BG_MAP_SCALE;
+  const float screen_x = (WINDOW_WIDTH - scaled_screen_w) / 2.0f;
+  const float screen_y = PANEL_TOP;
+  const float bg_y = screen_y + scaled_screen_h + SECTION_GAP;
+  const float bg_row_w = (scaled_bg_w * 2.0f) + BG_MAP_GAP;
+  const float bg_9800_x = (WINDOW_WIDTH - bg_row_w) / 2.0f;
+  const Rectangle screen_src = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+  const Rectangle bg_src = {0, 0, BG_MAP_WIDTH, BG_MAP_HEIGHT};
+  const Rectangle screen_dest = {screen_x, screen_y, scaled_screen_w,
+                                 scaled_screen_h};
+  const Rectangle bg_9800_dest = {bg_9800_x, bg_y, scaled_bg_w, scaled_bg_h};
+  const Rectangle bg_9c00_dest = {bg_9800_x + scaled_bg_w + BG_MAP_GAP, bg_y,
+                                  scaled_bg_w, scaled_bg_h};
 
   // skip the bootrom for now
   BOY boy;
@@ -71,30 +94,40 @@ int main() {
   log_state(&boy);
 
   while (!WindowShouldClose()) {
-    step_boy(&boy);
+    int steps = 0;
+    while (!(boy.event & EVENT_FRAME_READY) &&
+           steps < MAX_STEPS_PER_HOST_FRAME) {
+      step_boy(&boy);
+      steps++;
+    }
 
     // update texture with ppu framebuffer
-    // still need to wire up sending the frames to the buffer and setting the
-    // colour correctly
     if (boy.event & EVENT_FRAME_READY) {
       UpdateTexture(screen_tex, &boy.ppu.framebuffer);
-      // UpdateTexture(bgmap_tex);
+      UpdateTexture(bgmap_9800_tex, &boy.ppu.bgMap9800Buffer);
+      UpdateTexture(bgmap_9c00_tex, &boy.ppu.bgMap9C00Buffer);
       boy.event &= ~EVENT_FRAME_READY;
     }
 
     BeginDrawing();
-    ClearBackground(WHITE);
+    ClearBackground((Color){236, 232, 216, 255});
 
-    DrawTexture(screen_tex, WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2, 10, WHITE);
+    GuiLabel((Rectangle){bg_9800_dest.x, bg_9800_dest.y - 26,
+                         bg_9800_dest.width, 20},
+             "BG map $9800");
+    GuiLabel((Rectangle){screen_dest.x, screen_dest.y - 26, screen_dest.width,
+                         20},
+             "LCD");
+    GuiLabel((Rectangle){bg_9c00_dest.x, bg_9c00_dest.y - 26,
+                         bg_9c00_dest.width, 20},
+             "BG map $9C00");
 
-    GuiLabel((Rectangle){WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2,
-                         SCREEN_HEIGHT + 10, 100, 20},
-             "background map");
-
-    DrawTexture(bgmap_tex, WINDOW_WIDTH / 2 - SCREEN_WIDTH / 2,
-                SCREEN_HEIGHT + 15, WHITE);
-
-    GuiLabel((Rectangle){0, 0, 100, 20}, "test");
+    DrawTexturePro(bgmap_9800_tex, bg_src, bg_9800_dest, (Vector2){0, 0}, 0,
+                   WHITE);
+    DrawTexturePro(screen_tex, screen_src, screen_dest, (Vector2){0, 0}, 0,
+                   WHITE);
+    DrawTexturePro(bgmap_9c00_tex, bg_src, bg_9c00_dest, (Vector2){0, 0}, 0,
+                   WHITE);
 
     // DrawRectangle(225, 132, 24, 84, BLACK);
     // DrawRectangle(195, 161, 84, 25, BLACK);

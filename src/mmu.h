@@ -113,8 +113,8 @@ struct MMU {
   bool enabling_dma;
   bool dma_delay;
   uint8_t dma_progress;
-  uint16_t dma_src;
 
+  uint16_t DMA_SRC;
   // interrupt registers
   uint8_t IF;
   uint8_t IE;

@@ -122,7 +122,7 @@ void write_r8(BOY *boy, uint8_t data, uint8_t reg) {
 
   case 6: {
     uint16_t address = read_r16(&boy->cpu, 2);
-    write_byte(boy, address, data);
+    write_byte_tick(boy, address, data);
   } break;
   case 7:
     boy->cpu.A = data;
@@ -132,15 +132,15 @@ void write_r8(BOY *boy, uint8_t data, uint8_t reg) {
 void write_r16mem(BOY *boy, uint8_t reg, uint8_t data) {
   switch (reg) {
   case 0:
-    write_byte(boy, (boy->cpu.B << 8) | (boy->cpu.C), data);
+    write_byte_tick(boy, (boy->cpu.B << 8) | (boy->cpu.C), data);
     return;
   case 1:
-    write_byte(boy, (boy->cpu.D << 8) | (boy->cpu.E), data);
+    write_byte_tick(boy, (boy->cpu.D << 8) | (boy->cpu.E), data);
     return;
   case 2:
   case 3: {
     uint16_t hl = (boy->cpu.H << 8) | boy->cpu.L;
-    write_byte(boy, hl, data);
+    write_byte_tick(boy, hl, data);
 
     if (reg == 2) {
       hl += 1;

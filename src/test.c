@@ -75,7 +75,7 @@ void test_dma_timing() {
   // this M cycle is where the dma is requested
   write_byte_tick(boy, 0xFF46, 0xC0);
 
-  assert(boy->mmu.dma_src == 0xC000);
+  assert(boy->mmu.DMA_SRC == 0xC000);
   assert(boy->mmu.dma_delay == true);
 
   // assert first byte in work ram is first byte of sprite

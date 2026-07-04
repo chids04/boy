@@ -25,8 +25,11 @@ void init_components(BOY *boy) {
   init_cpu(&boy->cpu, header_checksum);
   init_ppu(&boy->ppu);
   boy->timers.mmu = &boy->mmu;
+  boy->event = EVENT_NONE;
 
   atexit(close_log_file);
+
+  log_set_quiet(true);
 }
 
 // called every M cycle ( 4 T Cycles )
@@ -35,11 +38,9 @@ void tick(BOY *boy, int cycles) {
   handle_dma(boy);
 
   // also tick the ppu here too
-  log_set_quiet(false);
   for (int i = 0; i < 4; i++) {
     tick_ppu(boy);
   }
-  log_set_quiet(true);
 };
 
 void handle_dma(BOY *boy) {
@@ -61,10 +62,10 @@ void handle_dma(BOY *boy) {
 
   if (boy->mmu.dma_transfer) {
     if (boy->mmu.dma_progress < 160) {
-      uint16_t src = boy->mmu.dma_src + boy->mmu.dma_progress;
+      uint16_t src = boy->mmu.DMA_SRC + boy->mmu.dma_progress;
       uint8_t data = handle_dma_read(boy, src);
 
-      memcpy(&((uint8_t *)boy->mmu.oam)[boy->mmu.dma_progress], &data, 8);
+      ((uint8_t *)boy->mmu.oam)[boy->mmu.dma_progress] = data;
       boy->mmu.dma_progress++;
     } else if (boy->mmu.dma_progress == 160) {
       boy->mmu.dma_transfer = false;

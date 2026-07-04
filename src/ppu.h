@@ -7,6 +7,8 @@
 #define MAX_SPRITES 10
 #define FIFO_SIZE 8
 #define FRAMEBUFFER_SIZE 0x5A00
+#define BG_MAP_PIXEL_WIDTH 256
+#define BG_MAP_PIXEL_HEIGHT 256
 
 enum TILE_ADDRESS_MODE { TILE_8000 = 0x8000, TILE_8800 = 0x9000 };
 
@@ -47,6 +49,7 @@ typedef struct PixelFetcher {
   } state;
 
   int x_offset;
+  int fetcher_x;
   int window_line;
   int cycles_remaining;
 
@@ -67,7 +70,8 @@ struct PPU {
   PPU_MODE ppu_mode;
 
   BoyColor framebuffer[144][160];
-  BoyColor bgMapBuffer[1024];
+  BoyColor bgMap9800Buffer[BG_MAP_PIXEL_HEIGHT][BG_MAP_PIXEL_WIDTH];
+  BoyColor bgMap9C00Buffer[BG_MAP_PIXEL_HEIGHT][BG_MAP_PIXEL_WIDTH];
 
   BoyColor *pallette_colors;
 

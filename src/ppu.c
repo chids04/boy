@@ -10,6 +10,41 @@
 #include <stdlib.h>
 #include <string.h>
 
+static uint8_t ppu_read_vram(MMU *mmu, uint16_t address) {
+  if (address < VRAM_START || address > VRAM_END) {
+    return 0xFF;
+  }
+
+  return mmu->vram[address - VRAM_START];
+}
+
+static void render_debug_bg_map(BOY *boy, uint16_t bg_base,
+                                BoyColor buffer[BG_MAP_PIXEL_HEIGHT]
+                                               [BG_MAP_PIXEL_WIDTH]) {
+  for (int tile_y = 0; tile_y < 32; tile_y++) {
+    for (int tile_x = 0; tile_x < 32; tile_x++) {
+      uint16_t tilemap_addr = bg_base + (tile_y * 32) + tile_x;
+      uint8_t tile_num = ppu_read_vram(&boy->mmu, tilemap_addr);
+      uint16_t tile_addr = get_tile_base_address(&boy->mmu, tile_num);
+
+      for (int pixel_y = 0; pixel_y < 8; pixel_y++) {
+        uint8_t tile_low = ppu_read_vram(&boy->mmu, tile_addr + pixel_y * 2);
+        uint8_t tile_high =
+            ppu_read_vram(&boy->mmu, tile_addr + pixel_y * 2 + 1);
+
+        for (int pixel_x = 0; pixel_x < 8; pixel_x++) {
+          int bit_idx = 7 - pixel_x;
+          uint8_t color_idx = get_color_idx(tile_low, tile_high, bit_idx);
+          int bg_pixel_y = tile_y * 8 + pixel_y;
+          int bg_pixel_x = tile_x * 8 + pixel_x;
+
+          buffer[bg_pixel_y][bg_pixel_x] = get_color_value(boy, color_idx);
+        }
+      }
+    }
+  }
+}
+
 void init_ppu(PPU *ppu) {
   ppu->ppu_mode = PPU_MODE_2;
   ppu->dots = 0;
@@ -18,6 +53,7 @@ void init_ppu(PPU *ppu) {
   ppu->sprite_buffer = calloc(10, sizeof(SPRITE));
   ppu->sprite_buffer_offset = 0;
   ppu->pixel_fetcher.x_offset = 0;
+  ppu->pixel_fetcher.fetcher_x = 0;
   ppu->pixel_fetcher.state = PixelFetcher_BG;
   ppu->vblank_ended = false;
 
@@ -30,6 +66,7 @@ void init_ppu(PPU *ppu) {
 }
 void mode2_init(PPU *ppu) {
   ppu->draw_len = 0;
+  ppu->dots = 0;
   ppu->ppu_mode = PPU_MODE_2;
   ppu->oam_offset = 0;
   memset(ppu->sprite_buffer, 0, sizeof(SPRITE) * 10);
@@ -51,6 +88,7 @@ void mode3_init(PPU *ppu) {
 
   // init the pixel fetcher
   ppu->pixel_fetcher.x_offset = 0;
+  ppu->pixel_fetcher.fetcher_x = 0;
   ppu->pixel_fetcher.state = PixelFetcher_BG;
   ppu_queue_reset(&ppu->background_fifo);
   ppu_queue_reset(&ppu->sprite_fifo);
@@ -66,6 +104,14 @@ void reset_fetcher_cycles(PPU *ppu) { ppu->pixel_fetcher.cycles_remaining = 1; }
 
 // called every M cycle ( 4 T Cycles )
 void tick_ppu(BOY *boy) {
+  if (get_bit(boy->mmu.LCDC, 7) == 0) {
+    boy->ppu.ppu_mode = PPU_MODE_0;
+    boy->ppu.dots = 0;
+    boy->mmu.LY = 0;
+    set_ppu_stat_bits(&boy->mmu, boy->ppu.ppu_mode);
+    return;
+  }
+
   // log_debug("PPU Mode: %d", (int)boy->ppu.ppu_mode);
   boy->ppu.dots += 1;
   boy->ppu.total_dots += 1;
@@ -98,10 +144,11 @@ void tick_ppu(BOY *boy) {
 }
 
 void set_ppu_stat_bits(MMU *mmu, PPU_MODE mode) {
+  mmu->STAT &= 0xFC;
+
   switch (mode) {
 
   case PPU_MODE_0:
-    mmu->STAT |= 0b00;
     break;
   case PPU_MODE_1:
     mmu->STAT |= 0b01;
@@ -137,18 +184,12 @@ void check_vblank(BOY *boy) {
 
   // sets the event to signal to ui to draw the screen
   // done at the start of each scanline
-  if (is_mode(&boy->ppu, PPU_MODE_1)) {
+  if (is_mode(&boy->ppu, PPU_MODE_1) && !boy->ppu.vblank_ended) {
     boy->event |= EVENT_FRAME_READY;
+    boy->ppu.vblank_ended = true;
 
-    uint16_t bg_base = get_bgmap_base(boy);
-
-    for (int i = 0; i < 1024; i++) {
-      // get the tile number from RAM
-      uint8_t tile_num = read_byte_no_tick(boy, bg_base + i);
-
-      // use the tile number to get the tile from tile map
-      uint16_t base_tile_address = get_tile_base_address(&boy->mmu, tile_num);
-    }
+    render_debug_bg_map(boy, 0x9800, boy->ppu.bgMap9800Buffer);
+    render_debug_bg_map(boy, 0x9C00, boy->ppu.bgMap9C00Buffer);
   }
 }
 
@@ -295,6 +336,7 @@ void handle_ppu_hblank(BOY *boy) {
     boy->ppu.dots = 0;
     boy->mmu.LY += 1;
     boy->ppu.ppu_mode = PPU_MODE_1;
+    set_bit(&boy->mmu.IF, 0);
   } else if (boy->ppu.dots == boy->ppu.ppu_state.PPU_HBLANK.hblank_len) {
     log_debug(
         "PPU prev mode: HBlank, PPU current mode: OAM scan, dots taken: %d",
@@ -313,7 +355,8 @@ void handle_ppu_vblank(BOY *boy) {
 
   // could also just check the scanline number too
   if (boy->ppu.dots == 4560) {
-
+    boy->mmu.LY = 0;
+    boy->ppu.vblank_ended = false;
     mode2_init(&boy->ppu);
   }
 }
@@ -340,7 +383,7 @@ MODE_3_STATE mode_3_tile_num(BOY *boy) {
   bg_base += (x_offset + y_offset) & 0x3FF;
 
   // get the tile number (x offset) in the tilemap
-  boy->ppu.ppu_state.PPU_DRAW.tile_num = read_byte_no_tick(boy, bg_base);
+  boy->ppu.ppu_state.PPU_DRAW.tile_num = ppu_read_vram(&boy->mmu, bg_base);
 
   if (boy->ppu.ppu_state.PPU_DRAW.repeat_count == 2 ||
       boy->ppu.ppu_state.PPU_DRAW.repeat_count == 1) {
@@ -369,7 +412,7 @@ MODE_3_STATE mode_3_tile_low(BOY *boy) {
   boy->ppu.ppu_state.PPU_DRAW.tile_address = base_tile_address + tile_y_offset;
 
   boy->ppu.ppu_state.PPU_DRAW.tile_low =
-      read_byte_no_tick(boy, boy->ppu.ppu_state.PPU_DRAW.tile_address);
+      ppu_read_vram(&boy->mmu, boy->ppu.ppu_state.PPU_DRAW.tile_address);
 
   if (boy->ppu.ppu_state.PPU_DRAW.repeat_count == 2 ||
       boy->ppu.ppu_state.PPU_DRAW.repeat_count == 1) {
@@ -386,7 +429,7 @@ MODE_3_STATE mode_3_tile_high(BOY *boy) {
             boy->ppu.total_dots);
 
   boy->ppu.ppu_state.PPU_DRAW.tile_high =
-      read_byte_no_tick(boy, boy->ppu.ppu_state.PPU_DRAW.tile_address + 1);
+      ppu_read_vram(&boy->mmu, boy->ppu.ppu_state.PPU_DRAW.tile_address + 1);
 
   if (boy->ppu.ppu_state.PPU_DRAW.repeat_count == 2 ||
       boy->ppu.ppu_state.PPU_DRAW.repeat_count == 1) {
@@ -418,7 +461,7 @@ MODE_3_STATE mode_3_fifo(BOY *boy) {
     return MODE_3_FIFO;
   }
 
-  for (int i = 0; i < 8; ++i) {
+  for (int i = 7; i >= 0; i--) {
     uint8_t color_idx = get_color_idx(boy->ppu.ppu_state.PPU_DRAW.tile_low,
                                       boy->ppu.ppu_state.PPU_DRAW.tile_high, i);
 
@@ -431,6 +474,8 @@ MODE_3_STATE mode_3_fifo(BOY *boy) {
       log_error("failed to queue bg pixel number %d into bg queue", i);
     }
   }
+
+  boy->ppu.pixel_fetcher.fetcher_x += 1;
 
   if ((boy->mmu.SCX % 8) != 0 && (boy->ppu.pixel_fetcher.x_offset == 0)) {
     boy->ppu.ppu_state.PPU_DRAW.scx_delay = boy->mmu.SCX % 8;
@@ -478,6 +523,8 @@ void mode_3_push(BOY *boy) {
 
   log_debug("Pushed Pixel %d to the framebuffer, PPU dots: %d",
             boy->ppu.pixel_fetcher.x_offset, boy->ppu.dots);
+
+  free(entry);
 }
 
 uint16_t get_bg_base(MMU *mmu) {
@@ -523,10 +570,10 @@ uint16_t get_tile_x(BOY *boy) {
 
   // add the x-offset
   if (boy->ppu.pixel_fetcher.state == PixelFetcher_BG) {
-    x_offset = (boy->ppu.pixel_fetcher.x_offset + (boy->mmu.SCX / 8)) & 0x1F;
+    x_offset = ((boy->mmu.SCX / 8) + boy->ppu.pixel_fetcher.fetcher_x) & 0x1F;
   } else if (boy->ppu.pixel_fetcher.state == PixelFetcher_WIN) {
     // window does not scroll
-    x_offset = boy->ppu.pixel_fetcher.x_offset;
+    x_offset = boy->ppu.pixel_fetcher.fetcher_x & 0x1F;
   } else {
 
     log_error("tile y-offset for objects %d not implemented",
@@ -559,7 +606,7 @@ uint16_t get_tile_y(BOY *boy) {
 // for now this only handles bg color palette but will be expanded to handle
 // sprites too
 BoyColor get_color_value(BOY *boy, uint8_t color_idx) {
-  uint8_t color_val_idx;
+  uint8_t color_val_idx = 0;
 
   switch (color_idx) {
   case 0:
