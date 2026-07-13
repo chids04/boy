@@ -31,6 +31,11 @@ cmake --build --preset release
 
 the `gb_emu` binary will be inside the `/build` folder, currently this will run the cpu tests in the `/cpu_instrs` folder
 
+# images
+
+output of test of cpu instructions
+[!](./screenshots/ss-cpu_instrs.png)
+
 ## todo
 * ppu
 * gui for graphical debugging and playing game (duh)
