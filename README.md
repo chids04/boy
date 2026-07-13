@@ -34,7 +34,7 @@ the `gb_emu` binary will be inside the `/build` folder, currently this will run 
 # images
 
 output of test of cpu instructions
-[!](./screenshots/ss-cpu_instrs.png)
+![image](./screenshots/ss-cpu_instrs.png)
 
 ## todo
 * ppu
